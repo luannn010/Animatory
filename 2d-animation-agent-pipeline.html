@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Animation → AI Agent Pipeline Spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&family=Archivo:wght@400;500;600;700;900&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --orange:#F2811D;
+    --purple:#4B2367;
+    --purple-deep:#2c1340;
+    --cream:#FBE9A8;
+    --teal:#1E91A6;
+    --olive:#A9A038;
+    --rust:#8A3411;
+    --ink:#1c0e2e;
+    --mortar:#b85814;
+    --paper:#f7f1e8;
+    /* model-type accents */
+    --m-text:#5B8DEF;     /* text LLM */
+    --m-image:#E0529C;    /* image gen */
+    --m-audio:#3FB68B;    /* audio / tts */
+    --m-video:#C97BE0;    /* video / motion */
+    --m-orch:#E0A800;     /* orchestrator */
+    --m-qc:#7C8AA0;       /* qc / utility */
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:'Archivo',sans-serif;
+    background:var(--paper);
+    color:#26152f;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    background:var(--purple);
+    color:var(--cream);
+    padding:60px 24px 50px;
+    text-align:center;
+    border-bottom:8px solid var(--ink);
+    position:relative;
+  }
+  .hero h1{
+    font-family:'Bungee',sans-serif;
+    font-size:clamp(2rem,6vw,4rem);
+    line-height:.96;
+    text-shadow:4px 4px 0 var(--ink);
+  }
+  .hero .sub{
+    margin:18px auto 0;max-width:680px;
+    font-weight:500;color:#f3ddff;font-size:clamp(.95rem,2.2vw,1.15rem);
+  }
+  .badge{
+    display:inline-block;background:var(--orange);color:var(--ink);
+    font-family:'Archivo Black',sans-serif;font-size:.7rem;letter-spacing:3px;
+    padding:7px 16px;border-radius:3px;margin-bottom:20px;box-shadow:3px 3px 0 var(--ink);
+  }
+
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px;}
+
+  /* ---------- LEGEND ---------- */
+  .legend{
+    background:var(--ink);
+    padding:26px 20px;
+  }
+  .legend-inner{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+  .legend h2{
+    width:100%;text-align:center;color:var(--cream);font-family:'Bungee',sans-serif;
+    font-size:1rem;letter-spacing:1px;margin-bottom:14px;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    background:#2a1a3d;color:#eadcff;border-radius:30px;
+    padding:7px 15px;font-size:.8rem;font-weight:600;
+    border:1px solid #3d2a52;
+  }
+  .dot{width:13px;height:13px;border-radius:50%;flex:none;}
+
+  /* ---------- PHASE ---------- */
+  .phase{padding:46px 0 14px;}
+  .phase-head{
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:8px;
+  }
+  .phase-num{
+    font-family:'Bungee',sans-serif;font-size:2.4rem;color:#fff;
+    background:var(--orange);width:64px;height:64px;border-radius:14px;
+    display:grid;place-items:center;box-shadow:5px 5px 0 var(--ink);flex:none;
+  }
+  .phase h2{
+    font-family:'Archivo Black',sans-serif;font-size:clamp(1.4rem,4vw,2rem);
+    color:var(--purple);line-height:1;
+  }
+  .phase .tagline{color:#5a4368;font-weight:600;margin:6px 0 24px;font-size:1rem;}
+  .phase.pre .phase-num{background:var(--teal);}
+  .phase.prod .phase-num{background:var(--rust);}
+  .phase.post .phase-num{background:var(--purple);}
+
+  /* ---------- AGENT CARD ---------- */
+  .agents{display:grid;gap:20px;}
+  .agent{
+    background:#fff;border-radius:14px;overflow:hidden;
+    border:2px solid var(--ink);
+    box-shadow:7px 7px 0 rgba(28,14,46,.4);
+  }
+  .agent-top{
+    display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+    padding:16px 20px;border-bottom:2px dashed #d9cdbb;
+  }
+  .agent-role{
+    font-family:'Archivo Black',sans-serif;font-size:1.15rem;color:var(--ink);
+    flex:1 1 200px;line-height:1.1;
+  }
+  .agent-role small{display:block;font-family:'Archivo';font-weight:600;font-size:.78rem;color:#8a7799;margin-top:3px;letter-spacing:.5px;}
+  .model-tag{
+    font-family:'Space Mono',monospace;font-weight:700;font-size:.72rem;
+    color:#fff;padding:6px 12px;border-radius:6px;letter-spacing:.5px;white-space:nowrap;
+  }
+  .agent-body{padding:18px 22px 22px;}
+  .resp{
+    font-size:.98rem;color:#2c1840;font-weight:600;margin-bottom:16px;
+    background:var(--cream);border-left:5px solid var(--orange);
+    padding:10px 14px;border-radius:0 6px 6px 0;
+  }
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;}
+  .col h4{
+    font-size:.72rem;letter-spacing:1.5px;text-transform:uppercase;
+    color:#9a3b16;margin-bottom:8px;font-weight:800;
+  }
+  .col ul{list-style:none;}
+  .col li{
+    font-size:.88rem;color:#3d2c4d;padding:4px 0 4px 18px;position:relative;
+  }
+  .col li::before{content:"▸";position:absolute;left:0;color:var(--orange);font-weight:700;}
+  .io{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+  .io-box{border-radius:8px;padding:10px 12px;font-size:.82rem;}
+  .io-in{background:#eef4ff;border:1px solid #c9dbff;}
+  .io-out{background:#fff0f8;border:1px solid #f6cce4;}
+  .io-box b{display:block;font-size:.66rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+  .io-in b{color:#3a5fb0;}
+  .io-out b{color:#b53b85;}
+  .io-box code{font-family:'Space Mono',monospace;font-size:.76rem;color:#333;}
+
+  /* model accent left bar */
+  .agent[data-m="text"]{border-left:8px solid var(--m-text);}
+  .agent[data-m="image"]{border-left:8px solid var(--m-image);}
+  .agent[data-m="audio"]{border-left:8px solid var(--m-audio);}
+  .agent[data-m="video"]{border-left:8px solid var(--m-video);}
+  .agent[data-m="orch"]{border-left:8px solid var(--m-orch);}
+  .agent[data-m="qc"]{border-left:8px solid var(--m-qc);}
+  .m-text{background:var(--m-text);}
+  .m-image{background:var(--m-image);}
+  .m-audio{background:var(--m-audio);}
+  .m-video{background:var(--m-video);}
+  .m-orch{background:var(--m-orch);color:#3a2c00!important;}
+  .m-qc{background:var(--m-qc);}
+
+  /* ---------- FLOW STRIP ---------- */
+  .flowstrip{background:var(--purple-deep);padding:40px 20px;}
+  .flowstrip h2{color:var(--cream);font-family:'Bungee',sans-serif;text-align:center;font-size:1.2rem;margin-bottom:24px;letter-spacing:1px;}
+  .flow{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;}
+  .fnode{
+    background:#fff;color:var(--ink);font-weight:700;font-size:.82rem;
+    padding:10px 14px;border-radius:8px;border:2px solid var(--ink);
+    box-shadow:3px 3px 0 rgba(0,0,0,.4);
+  }
+  .farrow{color:var(--orange);font-size:1.4rem;font-weight:700;}
+  .fnode.gate{background:var(--m-orch);}
+  .fnode.ship{background:var(--rust);color:#fff;}
+
+  /* ---------- ORCHESTRATION NOTE ---------- */
+  .note{
+    background:var(--ink);color:#e7d8f7;border-radius:14px;
+    padding:26px 28px;margin:40px 0;box-shadow:7px 7px 0 rgba(0,0,0,.3);
+  }
+  .note h3{font-family:'Bungee',sans-serif;color:var(--cream);font-size:1.05rem;margin-bottom:12px;letter-spacing:.5px;}
+  .note p{font-size:.92rem;margin-bottom:10px;color:#dcc9f2;}
+  .note b{color:#ffd86b;}
+
+  footer{background:var(--ink);color:#b89bd6;text-align:center;padding:30px 20px;font-size:.84rem;}
+  footer strong{color:var(--cream);font-family:'Bungee';font-weight:400;letter-spacing:1px;}
+
+  @media(max-width:560px){.io{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="badge">AGENT FLOW · BUILD REFERENCE</span>
+  <h1>2D ANIMATION<br>AGENT PIPELINE</h1>
+  <p class="sub">The full Pre-Production → Production → Post-Production flow from the Nickelodeon breakdown, re-mapped as discrete AI agents. Each card = one agent: its production role, the model type that powers it, what it owns, its tasks, and its inputs/outputs.</p>
+</header>
+
+<!-- MODEL LEGEND -->
+<section class="legend">
+  <div class="legend-inner">
+    <h2>MODEL TYPE KEY</h2>
+    <span class="chip"><span class="dot m-text"></span>Text / LLM — reasoning, breakdown, scripting</span>
+    <span class="chip"><span class="dot m-image"></span>Image-gen — character, prop, BG art</span>
+    <span class="chip"><span class="dot m-audio"></span>Audio / TTS — voice, music, SFX</span>
+    <span class="chip"><span class="dot m-video"></span>Video / Motion — animation, in-betweens, FX</span>
+    <span class="chip"><span class="dot m-orch"></span>Orchestrator — routing, gating, review</span>
+    <span class="chip"><span class="dot m-qc"></span>QC / Utility — checks, mux, delivery</span>
+  </div>
+</section>
+
+<div class="wrap">
+
+<!-- ================= PHASE 1 ================= -->
+<section class="phase pre">
+  <div class="phase-head">
+    <div class="phase-num">1</div>
+    <div>
+      <h2>PRE-PRODUCTION</h2>
+    </div>
+  </div>
+  <p class="tagline">Starts from a final script. Three tracks run in parallel — Design, Storyboard, Casting — then converge at a "Checking" gate before shipping.</p>
+
+  <div class="agents">
+
+    <!-- ORCHESTRATOR / SHOWRUNNER -->
+    <div class="agent" data-m="orch">
+      <div class="agent-top">
+        <div class="agent-role">Showrunner / Orchestrator<small>PRODUCTION ROLE: Producer · Script Breakdown</small></div>
+        <span class="model-tag m-orch">ORCHESTRATOR LLM</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Owns the master plan. Reads the final script, produces the asset "breakdown," spawns the three parallel tracks, and gates every handoff.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Parse script into scenes, beats, dialogue</li>
+            <li>Generate breakdown: every character, prop, vehicle, background</li>
+            <li>Assign work to track agents &amp; track dependencies</li>
+            <li>Decide what's omitted/added after animatic</li>
+          </ul></div>
+          <div class="col"><h4>Decisions it makes</h4><ul>
+            <li>What needs designing this episode</li>
+            <li>When a track is "done enough" to hand off</li>
+            <li>Retry / revise vs. approve</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>final_script.txt</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>breakdown.json</code> (asset list + scene graph)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DESIGN: LINE ART -->
+    <div class="agent" data-m="image">
+      <div class="agent-top">
+        <div class="agent-role">Design Agent — Line Art<small>PRODUCTION ROLE: B&amp;W Rough → Final Models</small></div>
+        <span class="model-tag m-image">IMAGE-GEN</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Turns the breakdown into clean black-and-white model sheets — every character, prop, and background, drawn from multiple angles so a rig can be built.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Rough predesign line art (feeds storyboard)</li>
+            <li>Refine to final clean line art</li>
+            <li>Character turnarounds (all angles)</li>
+            <li>Prop &amp; BG sheets w/ scale reference</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Consistent character identity across sheets</li>
+            <li>Show every angle (incl. "bottom of the shoe")</li>
+            <li>Multiple views = rig-ready</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>breakdown.json</code>, style refs</div>
+          <div class="io-box io-out"><b>Outputs</b><code>model_sheets/*.png</code> (B&amp;W line)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DESIGN: COLOR -->
+    <div class="agent" data-m="image">
+      <div class="agent-top">
+        <div class="agent-role">Design Agent — Color &amp; BG Paint<small>PRODUCTION ROLE: Color Styling · BG Paint · Final Color</small></div>
+        <span class="model-tag m-image">IMAGE-GEN</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Adds color styling to characters/props and paints backgrounds — producing day/night/lighting variants the vendor will color-match against.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Color-style characters &amp; props</li>
+            <li>Paint backgrounds (wide, high-res 2K/4K)</li>
+            <li>Generate lighting variants (day, night, sunset)</li>
+            <li>Lock final color palettes</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Palette consistency per asset</li>
+            <li>Broad views so vendor can push in / reframe</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>model_sheets/*.png</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>color_sheets/</code>, <code>bg_paint/</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STORYBOARD -->
+    <div class="agent" data-m="text">
+      <div class="agent-top">
+        <div class="agent-role">Storyboard Agent + Animatic<small>PRODUCTION ROLE: SB Roughs → Cleans → Editor → Animatic</small></div>
+        <span class="model-tag m-text">LLM + IMAGE-GEN</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Visualizes the script into shots and key poses, then an editor sub-step strings them into a timed animatic you can watch before any real animation.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Plan shots, compositions, comedic beats</li>
+            <li>Draw rough key poses → clean them</li>
+            <li>Edit drawings to a timed sequence</li>
+            <li>Iterate on director/exec notes → final animatic</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Key poses only (vendor fills in-betweens)</li>
+            <li>Camera-move + timing annotations</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>script</code>, predesign line art</div>
+          <div class="io-box io-out"><b>Outputs</b><code>animatic.mp4</code> + <code>boards/</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CASTING / VOICE -->
+    <div class="agent" data-m="audio">
+      <div class="agent-top">
+        <div class="agent-role">Casting &amp; Dialogue Agent<small>PRODUCTION ROLE: Casting · Record · Dialogue Edit</small></div>
+        <span class="model-tag m-audio">AUDIO / TTS</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Breaks the script down for voices, generates/records each character's dialogue, then cleans it (removing clicks, smacks, breaths).</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Assign a voice profile per character</li>
+            <li>Generate/record line reads</li>
+            <li>Dialogue edit: strip clicks &amp; breaths</li>
+            <li>Produce dialogue-exposed X-sheets (timing)</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Consistent voice per character</li>
+            <li>Timing data for lip-sync downstream</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>script</code> (dialogue lines)</div>
+          <div class="io-box io-out"><b>Outputs</b><code>dialogue/*.wav</code> + <code>xsheets.json</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MOUTH CHART -->
+    <div class="agent" data-m="image">
+      <div class="agent-top">
+        <div class="agent-role">Mouth-Chart / Phoneme Agent<small>PRODUCTION ROLE: 2D Mouth Charts · Expressions</small></div>
+        <span class="model-tag m-image">IMAGE-GEN</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Builds the mouth-shape library — one drawing per phoneme, per emotion — so the animator can sync mouths to dialogue even without understanding the language.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Draw a mouth shape per phoneme (A,B,C,D…)</li>
+            <li>Variants per emotion (neutral/happy/sad/angry)</li>
+            <li>Map phonemes ↔ frames on the X-sheet</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Language-agnostic lip-flap mapping</li>
+            <li>Aligns to dialogue timing</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>color_sheets/</code>, <code>xsheets.json</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>mouth_charts/</code> + phoneme map</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHECKING GATE -->
+    <div class="agent" data-m="qc">
+      <div class="agent-top">
+        <div class="agent-role">Checking / QA Gate Agent<small>PRODUCTION ROLE: Checking · Final Materials Ship</small></div>
+        <span class="model-tag m-qc">QC / UTILITY</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">The convergence gate. Re-breaks-down the animatic vs. designs, confirms nothing is missing or extra, then packages everything for the vendor.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Cross-check animatic against asset list</li>
+            <li>Flag omitted (stop work) / added (start work) assets</li>
+            <li>Validate completeness of every package</li>
+            <li>Bundle &amp; ship final materials</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>"Vendor only knows what you send" — completeness is everything</li>
+            <li>Collaborative, multi-check (not one reviewer)</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b>all design + audio + animatic + X-sheets</div>
+          <div class="io-box io-out"><b>Outputs</b><code>vendor_package.zip</code></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= PHASE 2 ================= -->
+<section class="phase prod">
+  <div class="phase-head">
+    <div class="phase-num">2</div>
+    <div><h2>PRODUCTION (Vendor Studio)</h2></div>
+  </div>
+  <p class="tagline">The package becomes real, moving animation. Builds rigs, fills in-betweens, syncs mouths — then sends "Take 1s" back for review loops.</p>
+
+  <div class="agents">
+
+    <!-- RIGGING -->
+    <div class="agent" data-m="video">
+      <div class="agent-top">
+        <div class="agent-role">Rigging Agent<small>PRODUCTION ROLE: Rig Build (Harmony / Flash)</small></div>
+        <span class="model-tag m-video">VIDEO / MOTION</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Assembles each character into a reusable "puppet" — a library of poses, hands, and expressions from the turnarounds — so animation doesn't redraw everything.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Build rig from multi-angle model sheets</li>
+            <li>Wire in hand poses &amp; facial expressions</li>
+            <li>Attach color (already built into Harmony rig)</li>
+            <li>Set up scene files w/ all rigs loaded</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>All angles present or rig fails</li>
+            <li>Reusable pose library</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>vendor_package.zip</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>rigs/</code> + scene files</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANIMATION -->
+    <div class="agent" data-m="video">
+      <div class="agent-top">
+        <div class="agent-role">Animation Agent (Key + In-Betweens)<small>PRODUCTION ROLE: Physical Animation · Lip-Sync</small></div>
+        <span class="model-tag m-video">VIDEO / MOTION</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Recreates the boards as real motion: blocks character action, draws the in-between frames for smooth movement, and animates lip-flap to the dialogue.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Block action &amp; camera moves from boards</li>
+            <li>Clean key poses, draw all in-betweens</li>
+            <li>Animate mouths via mouth-chart + X-sheet</li>
+            <li>Avoid "puppety" snapping between poses</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Smooth motion paths (no pose-snaps)</li>
+            <li>Lip-flap matches recorded dialogue</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>rigs/</code>, <code>animatic</code>, <code>mouth_charts/</code>, <code>dialogue/</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>take1_shots/*.mp4</code> (colored)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDITOR / RETAKE LOOP -->
+    <div class="agent" data-m="orch">
+      <div class="agent-top">
+        <div class="agent-role">Editor &amp; Retake-Loop Agent<small>PRODUCTION ROLE: Take 1s · Editor · Retakes</small></div>
+        <span class="model-tag m-orch">ORCHESTRATOR LLM</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Receives finished shots ("Take 1s"), cuts them into a sequence, judges timing/quality, and loops retakes back to animation until it's right.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Assemble shots into a cut</li>
+            <li>Check timing, clarity, asset correctness</li>
+            <li>Call retakes (loop back N times)</li>
+            <li>Emit the "1st Cut" when approved</li>
+          </ul></div>
+          <div class="col"><h4>Decisions</h4><ul>
+            <li>Approve vs. retake (budget/time-bounded)</li>
+            <li>Which shots are "less than desirable"</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>take1_shots/</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>first_cut.mp4</code> (+ retake requests)</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= PHASE 3 ================= -->
+<section class="phase post">
+  <div class="phase-head">
+    <div class="phase-num">3</div>
+    <div><h2>POST-PRODUCTION</h2></div>
+  </div>
+  <p class="tagline">From the 1st cut, three audio tracks + an FX pass run in parallel, then everything locks, mixes, and ships.</p>
+
+  <div class="agents">
+
+    <!-- DIALOGUE / ADR -->
+    <div class="agent" data-m="audio">
+      <div class="agent-top">
+        <div class="agent-role">ADR / Final Dialogue Agent<small>PRODUCTION ROLE: Dial. Editor · ADR Spot · Record</small></div>
+        <span class="model-tag m-audio">AUDIO / TTS</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Spots the cut for any changed, added, or re-performed lines, re-generates them, and edits to final clean dialogue.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Spot lines to re-record (ADR)</li>
+            <li>Re-generate / re-read those lines</li>
+            <li>Edit out pops, clicks, breaths</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Sync to locked picture timing</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>first_cut.mp4</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>final_dialogue.wav</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPOSER -->
+    <div class="agent" data-m="audio">
+      <div class="agent-top">
+        <div class="agent-role">Composer Agent<small>PRODUCTION ROLE: Music Spot · Final Music</small></div>
+        <span class="model-tag m-audio">AUDIO (MUSIC)</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Spots the cut for where music goes and what it should do (source vs. score, big vs. small, comedic), then composes the final music.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Music spot: placement &amp; intent per scene</li>
+            <li>Decide source music vs. wall-to-wall score</li>
+            <li>Compose &amp; revise on notes</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Tone matches comedy/emotion of scene</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>first_cut.mp4</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>final_music.wav</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SFX -->
+    <div class="agent" data-m="audio">
+      <div class="agent-top">
+        <div class="agent-role">SFX House Agent<small>PRODUCTION ROLE: SFX Spot · Final SFX</small></div>
+        <span class="model-tag m-audio">AUDIO (SFX)</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">Spots every non-vocal sound the picture needs (doors, punches, whooshes), then sources from a library or generates them fresh.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>SFX spot: list every needed effect</li>
+            <li>Pull from library or synthesize new</li>
+            <li>Review placement &amp; fit</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Frame-accurate placement</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>first_cut.mp4</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>final_sfx.wav</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VFX -->
+    <div class="agent" data-m="video">
+      <div class="agent-top">
+        <div class="agent-role">After-FX / VFX Agent<small>PRODUCTION ROLE: After FX Spot · Final FX</small></div>
+        <span class="model-tag m-video">VIDEO / MOTION</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">"Plusses" the picture — upgrading simple drawn effects (a plain dust cloud) into particles, glows, and richer composited visual effects.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Spot shots needing FX plus-ups</li>
+            <li>Add particles / glows / composites</li>
+            <li>Review &amp; finalize FX</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Matches show's visual style</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b><code>first_cut.mp4</code></div>
+          <div class="io-box io-out"><b>Outputs</b><code>final_fx_shots/</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MIX + DELIVER -->
+    <div class="agent" data-m="qc">
+      <div class="agent-top">
+        <div class="agent-role">Mix · Color · Delivery Agent<small>PRODUCTION ROLE: Picture Lock · Mix · Color Correction · Online · QC/CC · Deliver</small></div>
+        <span class="model-tag m-qc">QC / UTILITY</span>
+      </div>
+      <div class="agent-body">
+        <div class="resp">The final merge. Locks picture once credits + all elements are in, mixes audio to balance, color-corrects, then does online/QC/captioning and ships.</div>
+        <div class="cols">
+          <div class="col"><h4>Key Tasks</h4><ul>
+            <li>Assemble credits, confirm all elements → picture lock</li>
+            <li>Mix: balance dialogue under music &amp; SFX</li>
+            <li>Optional color correction / vignettes</li>
+            <li>Online edit, QC, closed captioning</li>
+            <li>Deliver to network / streamer</li>
+          </ul></div>
+          <div class="col"><h4>Must-haves</h4><ul>
+            <li>Dialogue always audible over music</li>
+            <li>First moment everything is seen together</li>
+          </ul></div>
+        </div>
+        <div class="io">
+          <div class="io-box io-in"><b>Inputs</b>final FX shots + dialogue + music + SFX + credits</div>
+          <div class="io-box io-out"><b>Outputs</b><code>episode_master.mov</code> → delivered</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</div>
+
+<!-- FLOW STRIP -->
+<section class="flowstrip">
+  <h2>END-TO-END AGENT FLOW</h2>
+  <div class="flow">
+    <span class="fnode">Script</span><span class="farrow">→</span>
+    <span class="fnode gate">Orchestrator</span><span class="farrow">→</span>
+    <span class="fnode">Design ‖ Storyboard ‖ Casting</span><span class="farrow">→</span>
+    <span class="fnode gate">Checking Gate</span><span class="farrow">→</span>
+    <span class="fnode">Rig → Animate</span><span class="farrow">→</span>
+    <span class="fnode gate">Editor / Retakes</span><span class="farrow">→</span>
+    <span class="fnode">Dialogue ‖ Music ‖ SFX ‖ VFX</span><span class="farrow">→</span>
+    <span class="fnode ship">Mix → Deliver</span>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="note">
+    <h3>Building this as a real agent flow — 4 things to get right</h3>
+    <p><b>1. Parallel + gated.</b> Pre-pro and post-pro both fan out into parallel tracks, then re-converge at a gate (Checking, Editor, Mix). Your orchestrator should spawn tracks concurrently and block on the gate, not run everything linearly.</p>
+    <p><b>2. Consistency is the hard problem.</b> Image and video agents must keep the same character identity, palette, and rig across every shot. Lock a style/character reference early and pass it to every downstream visual agent — this is the AI equivalent of the model sheets.</p>
+    <p><b>3. The "vendor only knows what you send" rule.</b> Each agent's output package must be self-contained. An animation agent can't infer the bottom of a shoe — if the design agent didn't produce that view, generation breaks. Validate completeness at the Checking gate before any expensive video generation runs.</p>
+    <p><b>4. Retake loops cost the most.</b> The Editor→Animation loop and post-pro reviews are where time/money go. Put cheap LLM/QC review <i>before</i> expensive video-gen, and cap retake iterations explicitly.</p>
+  </div>
+</div>
+
+<footer>
+  <p><strong>2D ANIMATION → AGENT PIPELINE</strong></p>
+  <p style="margin-top:8px;opacity:.7;">Pre-Production · Production (Vendor) · Post-Production — mapped to model types &amp; agent roles</p>
+</footer>
+
+</body>
+</html>

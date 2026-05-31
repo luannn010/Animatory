@@ -1,0 +1,331 @@
+# =============================================================
+#  2D ANIMATION — AGENT FRAMEWORK SCHEMA  (v1)
+#  Reusable specification for instantiating agents later.
+#
+#  Structure:
+#    1. base_agent          -> fields EVERY agent inherits
+#    2. stack_extensions    -> extra fields per execution stack
+#    3. orchestration_layer -> the "brain" agents
+#    4. execution_layer     -> the "hands" agents (by stack)
+#    5. audit_layer         -> metrics & reports (NOT agents)
+# =============================================================
+
+# -------------------------------------------------------------
+# 1. BASE AGENT  — the common contract.
+#    Every agent, regardless of stack, fills these in.
+# -------------------------------------------------------------
+base_agent:
+  id:            string          # unique slug, e.g. "design.lineart"
+  name:          string          # human label
+  layer:         enum            # orchestration | execution | audit
+  stack:         enum            # orchestration | comfyui | text | audio | image | video | utility
+  role:          string          # the production role it represents
+  responsibility: string         # one-line "what it owns"
+  status:        enum            # idle | running | retrying | done | failed
+
+  # ---- I/O contract (how it plugs into the graph) ----
+  inputs:                        # what it consumes
+    - name:     string
+      type:     string           # file | json | text | audio | image | video | ref
+      required: bool
+  outputs:                       # what it produces
+    - name:     string
+      type:     string
+      path:     string           # where artifact lands
+
+  # ---- execution behaviour ----
+  trigger:       enum            # called_by_orchestrator | event | manual
+  idempotent:    bool            # safe to re-run with same input?
+  retry:
+    max_attempts: int
+    backoff:      enum           # none | linear | exponential
+  timeout_s:     int
+
+  # ---- guardrails / acceptance ----
+  preconditions: [string]        # must be true before running (gate logic)
+  acceptance:    [string]        # output is "good" if these pass
+  on_fail:       enum            # retry | escalate | skip | halt
+
+  # ---- observability hooks (feed the audit layer) ----
+  emits_metrics: [string]        # see audit_layer.metrics
+  cost_estimate: string          # rough $ / time per run
+
+
+# -------------------------------------------------------------
+# 2. STACK EXTENSIONS — extra fields added on top of base_agent
+#    depending on which execution stack the agent runs on.
+# -------------------------------------------------------------
+stack_extensions:
+
+  orchestration:
+    runtime:        "Python / LangGraph / n8n / Temporal"
+    plans:          bool          # does it decompose work?
+    spawns:         [agent_id]    # children it can launch
+    gates:          [agent_id]    # handoffs it blocks on
+    loops:          bool          # can it iterate (retakes)?
+    decision_model: "LLM (reasoning)"
+
+  comfyui:
+    workflow_files: [path]        # one agent = a FOLDER of .json workflows
+    api_endpoint:   "http://comfyui:8188/prompt"   # headless API
+    node_packs:     [string]      # custom nodes required
+    gpu_required:   bool
+    checkpoint:     string        # model checkpoint / LoRA
+    consistency_ref: ref          # character/style lock passed in
+    invoked_via:    "POST workflow JSON -> poll -> collect output"
+
+  text:
+    runtime:        "API call / local LLM"
+    model_suggested: "Claude / GPT-class LLM"
+    prompt_template: path
+    structured_output: bool       # JSON-mode?
+    grounding_refs: [ref]
+
+  audio:
+    subtype:        enum          # tts | music | sfx
+    model_suggested: "TTS / music-gen / SFX-gen model or library"
+    voice_profiles: [string]      # for tts: per-character lock
+    sample_rate:    int
+    invoked_via:    "script / API -> wav"
+
+  image:
+    # (image-gen execution; often realized THROUGH comfyui)
+    runtime:        "ComfyUI workflow OR direct image-model API"
+    model_suggested: "SDXL / Flux-class + LoRA"
+    consistency_ref: ref          # MUST hold character identity + palette
+    views_required: [string]      # angles/lighting variants to emit
+
+  video:
+    runtime:        "ComfyUI (AnimateDiff/interp) OR video-model API"
+    model_suggested: "video-gen / frame-interp / rig-animation"
+    sub_workflows:  [string]      # block | in-between | lip-sync
+    consistency_ref: ref
+    note: "Least mature stack — character consistency across frames is the hard problem"
+
+
+# -------------------------------------------------------------
+# 3. ORCHESTRATION LAYER  (the brain)
+# -------------------------------------------------------------
+orchestration_layer:
+
+  - id: orch.showrunner
+    role: "Producer / Script Breakdown"
+    responsibility: "Parse script, build asset breakdown, spawn tracks, gate handoffs"
+    stack: orchestration
+    spawns: [design.lineart, design.color, board.storyboard, cast.dialogue]
+    gates:  [gate.checking]
+    loops:  false
+    inputs:  [{name: final_script, type: text, required: true}]
+    outputs: [{name: breakdown, type: json, path: breakdown.json}]
+    acceptance: ["every script entity present in breakdown"]
+
+  - id: orch.editor_retake
+    role: "Editor / Retakes loop"
+    responsibility: "Assemble Take-1 shots, judge timing/quality, loop retakes, emit 1st cut"
+    stack: orchestration
+    loops: true
+    gates: [exec.animation]
+    inputs:  [{name: take1_shots, type: video, required: true}]
+    outputs: [{name: first_cut, type: video, path: first_cut.mp4}]
+    retry: {max_attempts: 7, backoff: none}   # "once, twice, or seven times"
+    acceptance: ["timing reads clean", "no wrong assets", "no puppety snapping"]
+
+  - id: gate.checking
+    role: "Checking / Final Materials Ship"
+    responsibility: "Cross-check animatic vs designs, validate completeness, package for vendor"
+    stack: orchestration   # gate = orchestration logic, not generation
+    inputs:  [{name: all_prepro_assets, type: file, required: true}]
+    outputs: [{name: vendor_package, type: file, path: vendor_package.zip}]
+    preconditions: ["all 3 tracks reported done"]
+    acceptance: ["no omitted assets", "no unaddressed added assets", "package self-contained"]
+    on_fail: escalate
+
+
+# -------------------------------------------------------------
+# 4. EXECUTION LAYER  (the hands) — grouped by stack
+# -------------------------------------------------------------
+execution_layer:
+
+  image:
+    - id: design.lineart
+      role: "B&W Rough -> Final Models"
+      responsibility: "Generate clean line model sheets + turnarounds (all angles)"
+      stack: image
+      views_required: [front, 3q-front, side, 3q-back, back, top, bottom]
+      consistency_ref: character_bible
+      inputs:  [{name: breakdown, type: json, required: true}]
+      outputs: [{name: model_sheets, type: image, path: model_sheets/}]
+      acceptance: ["consistent identity across sheets", "every angle present"]
+
+    - id: design.color
+      role: "Color Styling / BG Paint / Final Color"
+      responsibility: "Color characters & props; paint backgrounds; lighting variants"
+      stack: image
+      views_required: [day, night, sunset]
+      inputs:  [{name: model_sheets, type: image, required: true}]
+      outputs: [{name: color_sheets, type: image, path: color_sheets/}]
+      acceptance: ["palette consistent per asset", "wide high-res BG (2K/4K)"]
+
+    - id: design.mouthchart
+      role: "Mouth Charts / Phoneme library"
+      responsibility: "One mouth shape per phoneme x emotion; map phoneme->frames"
+      stack: image
+      inputs:  [{name: color_sheets, type: image, required: true},
+                {name: xsheets, type: json, required: true}]
+      outputs: [{name: mouth_charts, type: image, path: mouth_charts/}]
+      acceptance: ["language-agnostic mapping", "aligned to dialogue timing"]
+
+  text:
+    - id: board.storyboard
+      role: "Storyboard -> Animatic"
+      responsibility: "Plan shots/poses, build timed animatic from key poses"
+      stack: text          # LLM plans; calls image-gen for frames
+      structured_output: true
+      inputs:  [{name: script, type: text, required: true},
+                {name: predesign, type: image, required: false}]
+      outputs: [{name: animatic, type: video, path: animatic.mp4},
+                {name: boards, type: image, path: boards/}]
+      acceptance: ["key poses only", "camera + timing annotations present"]
+
+  audio:
+    - id: cast.dialogue
+      role: "Casting / Record / Dialogue Edit"
+      responsibility: "Per-character voices, generate reads, clean clicks/breaths, X-sheets"
+      stack: audio
+      subtype: tts
+      voice_profiles: [per_character_locked]
+      inputs:  [{name: script, type: text, required: true}]
+      outputs: [{name: dialogue, type: audio, path: dialogue/},
+                {name: xsheets, type: json, path: xsheets.json}]
+      acceptance: ["consistent voice per character", "timing data emitted"]
+
+    - id: post.adr
+      role: "ADR / Final Dialogue"
+      responsibility: "Spot & re-generate changed lines, final clean dialogue"
+      stack: audio
+      subtype: tts
+      inputs:  [{name: first_cut, type: video, required: true}]
+      outputs: [{name: final_dialogue, type: audio, path: final_dialogue.wav}]
+
+    - id: post.composer
+      role: "Music Spot / Final Music"
+      responsibility: "Spot music placement & intent, compose final score"
+      stack: audio
+      subtype: music
+      inputs:  [{name: first_cut, type: video, required: true}]
+      outputs: [{name: final_music, type: audio, path: final_music.wav}]
+
+    - id: post.sfx
+      role: "SFX Spot / Final SFX"
+      responsibility: "List needed effects, source/synthesize, place frame-accurate"
+      stack: audio
+      subtype: sfx
+      inputs:  [{name: first_cut, type: video, required: true}]
+      outputs: [{name: final_sfx, type: audio, path: final_sfx.wav}]
+
+  comfyui:   # video/motion realized through ComfyUI graphs
+    - id: exec.rigging
+      role: "Rig Build (Harmony/Flash equivalent)"
+      responsibility: "Assemble reusable character puppet from multi-angle sheets"
+      stack: comfyui
+      workflow_files: [workflows/rig_build.json]
+      gpu_required: true
+      consistency_ref: character_bible
+      inputs:  [{name: vendor_package, type: file, required: true}]
+      outputs: [{name: rigs, type: file, path: rigs/}]
+      acceptance: ["all angles present", "reusable pose library"]
+
+    - id: exec.animation
+      role: "Physical Animation + Lip-sync"
+      responsibility: "Block action, draw in-betweens (smooth), animate lip-flap"
+      stack: comfyui
+      workflow_files:                      # ONE agent = MANY workflows
+        - workflows/anim_block.json        # blocking / key poses
+        - workflows/anim_inbetween.json    # interpolation / in-betweens
+        - workflows/anim_lipsync.json      # mouth-chart driven sync
+      sub_workflows: [block, in-between, lip-sync]
+      gpu_required: true
+      consistency_ref: character_bible
+      inputs:  [{name: rigs, type: file, required: true},
+                {name: animatic, type: video, required: true},
+                {name: mouth_charts, type: image, required: true},
+                {name: dialogue, type: audio, required: true}]
+      outputs: [{name: take1_shots, type: video, path: take1_shots/}]
+      acceptance: ["smooth motion (no snapping)", "lip-flap matches dialogue"]
+
+    - id: exec.vfx
+      role: "After-FX / Final FX"
+      responsibility: "Plus-up drawn effects into particles/glows/composites"
+      stack: comfyui
+      workflow_files: [workflows/vfx_particles.json, workflows/vfx_composite.json]
+      gpu_required: true
+      inputs:  [{name: first_cut, type: video, required: true}]
+      outputs: [{name: final_fx_shots, type: video, path: final_fx_shots/}]
+      acceptance: ["matches show visual style"]
+
+  utility:
+    - id: exec.mix_deliver
+      role: "Picture Lock / Mix / Color / Online / QC-CC / Deliver"
+      responsibility: "Lock picture, mix audio balance, color correct, QC, caption, ship"
+      stack: utility
+      inputs:  [{name: final_fx_shots, type: video, required: true},
+                {name: final_dialogue, type: audio, required: true},
+                {name: final_music, type: audio, required: true},
+                {name: final_sfx, type: audio, required: true},
+                {name: credits, type: image, required: true}]
+      outputs: [{name: episode_master, type: video, path: episode_master.mov}]
+      acceptance: ["dialogue audible over music", "all elements present at lock"]
+
+
+# -------------------------------------------------------------
+# 5. AUDIT & MONITORING LAYER   (NOT agents — metrics & reports)
+#    Every agent emits into these. This is your observability spine.
+# -------------------------------------------------------------
+audit_layer:
+
+  # ---- per-run metrics every agent should emit ----
+  metrics:
+    run:
+      - agent_id
+      - run_id
+      - status            # done | failed | retried
+      - attempts          # how many tries
+      - duration_s
+      - cost              # $ or compute units (esp. GPU minutes)
+      - tokens            # for text/LLM agents
+      - gpu_seconds       # for comfyui/video agents
+    quality:
+      - acceptance_passed # bool per acceptance rule
+      - retake_count      # times looped (animation/editor)
+      - consistency_score # character/palette drift detector
+      - manual_overrides  # human stepped in
+    pipeline:
+      - episode_id
+      - phase             # prepro | production | postpro
+      - track             # design | board | cast | ...
+      - blocked_on        # which gate it's waiting on
+      - critical_path     # is this agent on it?
+
+  # ---- reports to build on top of the metrics ----
+  reports:
+    - name: "Cost Dashboard"
+      shows: "spend per agent / per episode; GPU hotspots; cost of retake loops"
+      why:   "Retake loops + video-gen are the most expensive — watch them"
+    - name: "Throughput / Bottleneck"
+      shows: "which gate stalls longest; critical-path duration; parallel-track skew"
+      why:   "Find where parallel tracks wait on a slow sibling"
+    - name: "Quality / Drift"
+      shows: "consistency_score trend; acceptance pass-rate; retake_count per shot"
+      why:   "Catch character/palette drift before it cascades downstream"
+    - name: "Reliability"
+      shows: "failure rate per stack; retry success; timeout frequency"
+      why:   "Which stacks are flaky (video usually worst)"
+    - name: "Run Ledger / Trace"
+      shows: "full lineage: which inputs produced which outputs, per run"
+      why:   "Reproducibility + debugging a bad output back to its source"
+
+  # ---- where it plugs in ----
+  collection:
+    pattern: "each agent wraps execution and emits a structured run-record"
+    sinks_suggested: "OpenTelemetry / Prometheus + Grafana / a runs table in Postgres"
+    alerting: "threshold on cost spike, consistency drop, repeated failures"
