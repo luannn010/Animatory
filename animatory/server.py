@@ -26,6 +26,8 @@ from animatory.base_agent import BaseAgent
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor
 from animatory.executors.llamacpp import LlamaCppExecutor
+from animatory.studio.router import router as studio_router
+from animatory.studio.store import StudioStore
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry
     app.state.store = store
     app.state.executor_map = executor_map
+    app.state.studio_store = StudioStore()
 
     yield
 
@@ -70,6 +73,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(studio_router)
 
 
 @app.get("/health")
