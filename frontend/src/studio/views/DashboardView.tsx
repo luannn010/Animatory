@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Project } from '../types'
-import { studioApi } from '../mockApi'
+import { studioApi } from '../api'
 import { phasePath } from '../phases'
 import { ProjectCard } from '../components/ProjectCard'
 

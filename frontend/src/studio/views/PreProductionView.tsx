@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { Project, Scene, Asset } from '../types'
-import { studioApi } from '../mockApi'
+import { studioApi } from '../api'
 import { phasePath } from '../phases'
 import { PhaseStepperBar } from '../components/PhaseStepperBar'
 import { AssetCard } from '../components/AssetCard'
