@@ -76,7 +76,7 @@ class RetryConfig(BaseModel):
 
 class AgentDef(BaseModel):
     id: str
-    name: str
+    name: str = ""
     layer: LayerEnum
     stack: StackEnum
     role: str
@@ -163,6 +163,15 @@ class AgentListItem(BaseModel):
     timeout_s: int = 300
     acceptance: list[str] = []
     cost_estimate: str = "unknown"
+
+
+class MetricsSnapshot(BaseModel):
+    total_runs: int = 0
+    done: int = 0
+    failed: int = 0
+    avg_duration_s: float | None = None
+    total_cost: float | None = None
+    acceptance_pass_rate: float | None = None
 
 
 class ExecutorResult(BaseModel):

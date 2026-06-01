@@ -1,31 +1,12 @@
-import { useMemo } from 'react'
-import type { MetricsSnapshot, RunStatus, AgentStack } from '../types'
+import { useEffect, useState } from 'react'
+import type { MetricsSnapshot, RunStatus } from '../types'
 import { MetricsStrip } from '../components/MetricsStrip'
-import { MOCK_RUNS, MOCK_AGENTS } from '../api/mock'
-import { USE_MOCK } from '../config'
+import { api } from '../api'
 
-function computeMetrics(): MetricsSnapshot {
-  const runs = USE_MOCK ? MOCK_RUNS : []
-  const total_runs = runs.length
-  const total_cost = runs.reduce((s, r) => s + (r.cost ?? 0), 0)
-  const total_gpu_seconds = runs.reduce((s, r) => s + (r.gpu_seconds ?? 0), 0)
-  const avg_attempts = total_runs > 0 ? runs.reduce((s, r) => s + r.attempts, 0) / total_runs : 0
-  const completed = runs.filter(r => r.status === 'done')
-  const pass_rate = completed.length > 0 ? completed.filter(r => r.acceptance_passed).length / completed.length : 0
-
-  const runs_by_status = runs.reduce((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1
-    return acc
-  }, {} as Record<RunStatus, number>)
-
-  const stackMap = Object.fromEntries(MOCK_AGENTS.map(a => [a.id, a.stack]))
-  const runs_by_stack = runs.reduce((acc, r) => {
-    const stack = stackMap[r.agent_id] as AgentStack | undefined
-    if (stack) acc[stack] = (acc[stack] ?? 0) + 1
-    return acc
-  }, {} as Partial<Record<AgentStack, number>>)
-
-  return { total_runs, total_cost, total_gpu_seconds, avg_attempts, pass_rate, runs_by_status, runs_by_stack }
+const EMPTY_METRICS: MetricsSnapshot = {
+  total_runs: 0, total_cost: 0, total_gpu_seconds: 0,
+  avg_attempts: 0, pass_rate: 0, runs_by_status: {} as MetricsSnapshot['runs_by_status'],
+  runs_by_stack: {},
 }
 
 const STATUS_ORDER: RunStatus[] = ['done', 'failed', 'running', 'retrying', 'queued']
@@ -38,7 +19,11 @@ const STATUS_COLOR: Record<RunStatus, string> = {
 }
 
 export function MetricsView() {
-  const metrics = useMemo(computeMetrics, [])
+  const [metrics, setMetrics] = useState<MetricsSnapshot>(EMPTY_METRICS)
+
+  useEffect(() => {
+    api.getMetrics().then(data => setMetrics(data))
+  }, [])
 
   return (
     <div className="max-w-3xl">

@@ -2,20 +2,14 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { RunRecord } from '../types'
 import { StatusBadge } from '../components/StatusBadge'
-import { MOCK_RUNS } from '../api/mock'
-import { USE_MOCK } from '../config'
+import { api } from '../api'
 
 export function RunsHistory() {
   const [runs, setRuns] = useState<RunRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (USE_MOCK) {
-      setTimeout(() => { setRuns([...MOCK_RUNS]); setLoading(false) }, 200)
-    } else {
-      setRuns([])
-      setLoading(false)
-    }
+    api.getRuns().then(data => setRuns(data)).finally(() => setLoading(false))
   }, [])
 
   if (loading) {

@@ -1,0 +1,6 @@
+{
+  "final_script": "INT. KITCHEN - DAY\n\nCHAR_A\nHello world. This is a test scene.\n\nCHAR_B\nAgreed. Let us animate this.",
+  "episode_id": "ep001",
+  "phase": "prepro",
+  "track": "orchestration"
+}

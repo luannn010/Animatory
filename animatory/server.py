@@ -1,18 +1,27 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
-from animatory.models import AgentListItem, RunRecord, RunRequest, RunResponse
+from animatory.models import (
+    AgentListItem,
+    MetricsSnapshot,
+    RunRecord,
+    RunRequest,
+    RunResponse,
+    RunStatusEnum,
+)
 from animatory.registry import load_registry, AgentRegistry
-from animatory.run_store import RunStore
+from animatory.run_store import RunStore, InMemoryRunStore
 from animatory.base_agent import BaseAgent
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor
@@ -27,7 +36,7 @@ async def lifespan(app: FastAPI):
     registry = load_registry(yaml_path)
 
     db_path = os.environ.get("DB_PATH", "animatory.db")
-    store = RunStore(db_path)
+    store = InMemoryRunStore() if db_path == ":memory:" else RunStore(db_path)
     await store.init()
 
     if os.environ.get("ANIMATORY_FAKE_EXECUTORS", "0") == "1":
@@ -51,7 +60,7 @@ app = FastAPI(title="Animatory Backend", version="0.1.0", lifespan=lifespan)
 
 _cors_origins = os.environ.get(
     "CORS_ORIGINS",
-    "http://localhost:5173,http://localhost:3000"
+    "http://localhost:5173,http://localhost:5174,http://localhost:3000"
 ).split(",")
 
 app.add_middleware(
@@ -111,9 +120,6 @@ async def run_agent(agent_id: str, request: RunRequest):
     agent = BaseAgent(definition, executor, store)
 
     # Pre-generate run_id so we can return it immediately
-    import uuid
-    import datetime
-    from animatory.models import RunRecord, RunStatusEnum
     run_id = str(uuid.uuid4())
     agent._run_id = run_id
 
@@ -142,10 +148,6 @@ async def run_agent(agent_id: str, request: RunRequest):
 
 async def _agent_run_with_existing_record(agent: BaseAgent, request: RunRequest, record: RunRecord):
     """Run agent lifecycle using a pre-created record (avoids double-create)."""
-    import asyncio as _asyncio
-    import datetime
-    from animatory.models import RunStatusEnum
-
     store = agent.store
     definition = agent.definition
     run_id = record.run_id
@@ -170,13 +172,12 @@ async def _agent_run_with_existing_record(agent: BaseAgent, request: RunRequest,
         if attempt > 1:
             backoff_s = agent._apply_backoff(attempt)
             if backoff_s > 0:
-                await _asyncio.sleep(backoff_s)
+                await asyncio.sleep(backoff_s)
         await store.update(run_id, status=status, attempts=attempt)
 
         try:
-            from animatory.models import RunRecord as RR
-            result = await _asyncio.wait_for(agent.executor.execute(request, definition), timeout=float(definition.timeout_s))
-        except _asyncio.TimeoutError:
+            result = await asyncio.wait_for(agent.executor.execute(request, definition), timeout=float(definition.timeout_s))
+        except asyncio.TimeoutError:
             msg = f"Timed out on attempt {attempt}"
             if attempt < max_attempts:
                 continue
@@ -211,6 +212,24 @@ async def _agent_run_with_existing_record(agent: BaseAgent, request: RunRequest,
         acceptance_passed=acceptance_passed,
         outputs=result.outputs if result else [],
     )
+
+
+@app.get("/runs", response_model=list[RunRecord])
+async def list_runs(
+    agent_id: str | None = Query(default=None),
+    limit: int = Query(default=25, ge=1, le=100),
+):
+    store: RunStore = app.state.store
+    if agent_id:
+        return await store.list_by_agent(agent_id)
+    return await store.list_all(limit)
+
+
+@app.get("/metrics", response_model=MetricsSnapshot)
+async def get_metrics(agent_id: str | None = Query(default=None)):
+    store: RunStore = app.state.store
+    data = await store.metrics(agent_id)
+    return MetricsSnapshot(**data)
 
 
 @app.get("/runs/{run_id}", response_model=RunRecord)

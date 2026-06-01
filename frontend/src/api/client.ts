@@ -56,6 +56,36 @@ export function getHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health')
 }
 
+export function getRuns(agentId?: string, limit = 25): Promise<RunRecord[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (agentId) params.set('agent_id', agentId)
+  return apiFetch<RunRecord[]>(`/runs?${params}`)
+}
+
+export async function getMetrics(agentId?: string): Promise<import('../types').MetricsSnapshot> {
+  const params = agentId ? `?agent_id=${agentId}` : ''
+  const raw = await apiFetch<{
+    total_runs: number; done: number; failed: number;
+    avg_duration_s: number | null; total_cost: number | null;
+    acceptance_pass_rate: number | null;
+  }>(`/metrics${params}`)
+  return {
+    total_runs: raw.total_runs,
+    total_cost: raw.total_cost ?? 0,
+    total_gpu_seconds: 0,
+    avg_attempts: 0,
+    pass_rate: raw.acceptance_pass_rate ?? 0,
+    runs_by_status: {
+      done: raw.done,
+      failed: raw.failed,
+      running: 0,
+      retrying: 0,
+      queued: 0,
+    },
+    runs_by_stack: {},
+  }
+}
+
 // The backend emits named SSE events: `status`, `log`, `done`.
 // This wrapper normalizes them into the same `message` event interface
 // that mock.ts uses, so RunMonitor doesn't need to know the difference.
