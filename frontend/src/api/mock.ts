@@ -392,7 +392,7 @@ export async function triggerRun(
   body: RunTriggerRequest,
 ): Promise<RunTriggerResponse> {
   await delay(400)
-  const run_id = `run_${Date.now()}`
+  const run_id = `run_${agentId.replace(/\./g, '_')}_${Date.now()}`
   MOCK_RUNS.unshift({
     run_id,
     agent_id: agentId,
@@ -408,6 +408,7 @@ export async function triggerRun(
     logs: [],
     context: body.context,
     system_prompt: body.system_prompt,
+    scene_id: body.context.scene_id as string | undefined,
   })
   return { run_id }
 }
@@ -415,6 +416,31 @@ export async function triggerRun(
 export async function getHealth(): Promise<HealthResponse> {
   await delay(100)
   return { ok: true }
+}
+
+export async function getRuns(_agentId?: string, _limit = 25): Promise<RunRecord[]> {
+  await delay(200)
+  return [...MOCK_RUNS]
+}
+
+export async function listRuns(agentId?: string): Promise<RunRecord[]> {
+  await delay(200)
+  if (agentId) return MOCK_RUNS.filter(r => r.agent_id === agentId)
+  return [...MOCK_RUNS]
+}
+
+export async function getMetrics(_agentId?: string): Promise<import('../types').MetricsSnapshot> {
+  await delay(150)
+  const runs = MOCK_RUNS
+  const total_runs = runs.length
+  const total_cost = runs.reduce((s, r) => s + (r.cost ?? 0), 0)
+  const total_gpu_seconds = runs.reduce((s, r) => s + (r.gpu_seconds ?? 0), 0)
+  const avg_attempts = total_runs > 0 ? runs.reduce((s, r) => s + r.attempts, 0) / total_runs : 0
+  const completed = runs.filter(r => r.status === 'done')
+  const pass_rate = completed.length > 0 ? completed.filter(r => r.acceptance_passed).length / completed.length : 0
+  const runs_by_status = runs.reduce((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc }, {} as import('../types').MetricsSnapshot['runs_by_status'])
+  const runs_by_stack = {} as import('../types').MetricsSnapshot['runs_by_stack']
+  return { total_runs, total_cost, total_gpu_seconds, avg_attempts, pass_rate, runs_by_status, runs_by_stack }
 }
 
 // ── Mock SSE emitter ──────────────────────────────────────────────────────────
