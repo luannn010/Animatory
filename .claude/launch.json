@@ -6,6 +6,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-p", "4200", "D:\\Animatory\\mockup"],
       "port": 4200
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "D:\\Animatory\\frontend",
+      "port": 5173
     }
   ]
 }
