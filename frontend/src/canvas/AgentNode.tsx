@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import type { NodeProps } from '@xyflow/react'
+import type { NodeProps, Node } from '@xyflow/react'
 import type { AgentNodeData, SceneStatus } from '../types/canvas'
 import { StackBadge, stackBorderClass } from '../components/StackBadge'
 
@@ -21,8 +21,9 @@ function dominantStatus(fanout: AgentNodeData['fanout']): SceneStatus | 'idle' {
   return 'queued'
 }
 
-export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps<AgentNodeData>) {
-  const { agent, fanout } = data
+export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps<Node<AgentNodeData>>) {
+  const agent = data.agent
+  const fanout = data.fanout
   const status = dominantStatus(fanout)
   const dotColor = status === 'idle' ? 'bg-stone/40' : STATUS_DOT[status]
   const sceneCount = fanout?.scenes.length ?? 0

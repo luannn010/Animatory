@@ -27,7 +27,7 @@ export interface PipelineState {
   panelTab: 'overview' | 'scenes' | 'prompt' | 'logs' | 'io'
 }
 
-export interface AgentNodeData {
+export interface AgentNodeData extends Record<string, unknown> {
   agent: AgentSchema
   fanout: SceneFanout | null
 }

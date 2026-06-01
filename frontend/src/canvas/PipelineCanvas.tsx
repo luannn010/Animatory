@@ -7,15 +7,16 @@ import {
   useNodesState,
   useEdgesState,
   type NodeMouseHandler,
+  type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { AgentSchema } from '../types'
-import type { AgentNodeData, SceneFanout, PipelineState } from '../types/canvas'
+import type { SceneFanout, PipelineState } from '../types/canvas'
 import { AgentNode } from './AgentNode'
 import { buildNodes, buildEdges } from './pipelineData'
 import { NodePanel } from '../panel/NodePanel'
 
-const NODE_TYPES = { agentNode: AgentNode }
+const NODE_TYPES: NodeTypes = { agentNode: AgentNode as NodeTypes[string] }
 
 interface Props {
   agents: AgentSchema[]
@@ -28,7 +29,7 @@ const DEFAULT_EDGE_OPTS = {
 }
 
 export function PipelineCanvas({ agents, fanouts = {} }: Props) {
-  const [nodes, , onNodesChange] = useNodesState<AgentNodeData>(buildNodes(agents, fanouts))
+  const [nodes, , onNodesChange] = useNodesState(buildNodes(agents, fanouts))
   const [edges, , onEdgesChange] = useEdgesState(buildEdges(agents))
 
   const [pipeline, setPipeline] = useState<PipelineState>({

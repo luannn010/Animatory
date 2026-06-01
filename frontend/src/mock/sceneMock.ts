@@ -1,7 +1,7 @@
 import type { SceneFanout, SceneRun } from '../types/canvas'
 
 function scene(
-  agent_id: string,
+  _agent_id: string,
   scene_id: string,
   label: string,
   status: SceneRun['status'],

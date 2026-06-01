@@ -1,19 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { AgentSchema, AgentStack } from '../types'
+import type { AgentSchema } from '../types'
+import type { SceneFanout } from '../types/canvas'
 import { api } from '../api'
-import { AgentCard } from './AgentCard'
-
-const STACK_ORDER: AgentStack[] = ['orchestration', 'comfyui', 'text', 'audio', 'image', 'video', 'utility']
-
-const STACK_LABELS: Record<AgentStack, string> = {
-  orchestration: 'Orchestration',
-  comfyui:       'ComfyUI / Motion',
-  text:          'Text / LLM',
-  audio:         'Audio',
-  image:         'Image Generation',
-  video:         'Video',
-  utility:       'Utility',
-}
+import { PipelineCanvas } from '../canvas/PipelineCanvas'
+import { SCENE_FANOUTS } from '../mock/sceneMock'
+import { USE_MOCK } from '../config'
 
 export function AgentsView() {
   const [agents, setAgents] = useState<AgentSchema[]>([])
@@ -29,43 +20,21 @@ export function AgentsView() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-4xl">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-40 rounded-lg bg-hairline animate-pulse" />)}
+      <div className="w-full h-full flex items-center justify-center">
+        <span className="text-sm text-stone animate-pulse">Loading pipeline…</span>
       </div>
     )
   }
 
   if (error) {
-    return <p className="text-[#d45656] text-sm max-w-lg">{error}</p>
+    return <p className="text-[#d45656] text-sm p-8">{error}</p>
   }
 
-  const byStack = STACK_ORDER.reduce<Partial<Record<AgentStack, AgentSchema[]>>>((acc, stack) => {
-    const group = agents.filter(a => a.stack === stack)
-    if (group.length) acc[stack] = group
-    return acc
-  }, {})
+  const fanouts: Record<string, SceneFanout> = USE_MOCK ? SCENE_FANOUTS : {}
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-ink tracking-tight">Agent Pipeline</h1>
-        <p className="text-sm text-steel mt-1">{agents.length} agents across {Object.keys(byStack).length} stacks</p>
-      </div>
-
-      <div className="space-y-10">
-        {STACK_ORDER.filter(s => byStack[s]).map(stack => (
-          <section key={stack}>
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-steel mb-4 border-b border-hairline pb-2">
-              {STACK_LABELS[stack]}
-            </h2>
-            <div className="space-y-4">
-              {byStack[stack]!.map(agent => (
-                <AgentCard key={agent.id} agent={agent} />
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+    <div className="-m-8 h-[calc(100vh-4rem)]">
+      <PipelineCanvas agents={agents} fanouts={fanouts} />
     </div>
   )
 }
