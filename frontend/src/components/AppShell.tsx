@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { USE_MOCK } from '../config'
 
-const NAV = [
+const NAV: { to: string; label: string; icon: string; end?: boolean }[] = [
+  { to: '/',        label: 'Projects', icon: '◆', end: true },
   { to: '/agents',  label: 'Agents',  icon: '⬡' },
   { to: '/runs',    label: 'Runs',    icon: '▶' },
   { to: '/metrics', label: 'Metrics', icon: '◈' },
@@ -39,6 +40,7 @@ export function AppShell({ children }: Props) {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2 rounded-md text-sm transition-colors ${
                   isActive ? 'bg-surface text-ink font-medium' : 'text-steel'
