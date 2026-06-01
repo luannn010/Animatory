@@ -58,6 +58,7 @@ export interface RunRecord {
   error: string | null
   created_at: string
   logs: string[]
+  scene_id?: string
   context: Record<string, unknown>
   system_prompt: string
 }
