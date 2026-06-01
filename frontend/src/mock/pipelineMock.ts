@@ -1,0 +1,38 @@
+import type { RunRecord } from '../types'
+
+export const PIPELINE_RUNS: RunRecord[] = [
+  {
+    run_id: 'run_sc01_anim',
+    agent_id: 'exec.animation',
+    status: 'done',
+    attempts: 1,
+    duration_s: 12.4,
+    cost: 0.0031,
+    gpu_seconds: 8.1,
+    acceptance_passed: true,
+    outputs: [{ name: 'frames', type: 'image', url: '' }],
+    error: null,
+    created_at: '2026-06-01T10:00:00Z',
+    logs: ['Starting…', 'Executor returned 2 outputs', 'Acceptance passed'],
+    context: { episode_id: 'ep01', scene_id: 'sc01' },
+    system_prompt: '',
+    scene_id: 'sc01',
+  },
+  {
+    run_id: 'run_sc04_anim',
+    agent_id: 'exec.animation',
+    status: 'failed',
+    attempts: 1,
+    duration_s: null,
+    cost: null,
+    gpu_seconds: null,
+    acceptance_passed: null,
+    outputs: [],
+    error: 'ComfyUI timeout after 300s',
+    created_at: '2026-06-01T10:05:00Z',
+    logs: ['Starting…', 'ComfyUI timeout after 300s'],
+    context: { episode_id: 'ep01', scene_id: 'sc04' },
+    system_prompt: '',
+    scene_id: 'sc04',
+  },
+]
