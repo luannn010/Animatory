@@ -141,6 +141,7 @@ def chunk_file(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     text = source_path.read_text(encoding="utf-8")
+    words, _ = _build_word_offsets(text)
     records = chunk_text(text, target_words=target_words, overlap_words=overlap_words, min_chunk_words=min_chunk_words)
 
     for r in records:
@@ -148,7 +149,7 @@ def chunk_file(
 
     manifest = {
         "source_file": source_path.name,
-        "total_words": len(text.split()),
+        "total_words": len(words),
         "total_chars": len(text),
         "config": {
             "target_words": target_words,
