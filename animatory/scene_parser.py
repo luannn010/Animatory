@@ -54,6 +54,7 @@ async def parse_chunk(
     endpoint = (qwen_endpoint or os.environ.get("QWEN_ENDPOINT", "http://localhost:1090")).rstrip("/")
     model_name = model or os.environ.get("QWEN_MODEL", "qwen3.5")
     retries = max_retries if max_retries is not None else int(os.environ.get("QWEN_MAX_RETRIES", "3"))
+    timeout_s = float(os.environ.get("QWEN_TIMEOUT_S", "120"))
 
     prompt = _PROMPT_TEMPLATE.format(chunk_id=chunk_id, chunk_text=chunk_text)
     payload = {
@@ -67,7 +68,7 @@ async def parse_chunk(
         if attempt > 1:
             await asyncio.sleep(2 ** (attempt - 1))
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
                 resp = await client.post(f"{endpoint}/v1/chat/completions", json=payload)
                 resp.raise_for_status()
                 raw = resp.json()["choices"][0]["message"]["content"]

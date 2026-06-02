@@ -43,12 +43,21 @@ async def test_parse_endpoint_returns_run_id(client: AsyncClient, tmp_path, monk
     files = {"file": ("ep1.txt", io.BytesIO(TINY_TXT), "text/plain")}
     await client.post("/pipeline/chunk", files=files)
 
+    import asyncio
     from unittest.mock import patch, AsyncMock
     with patch("animatory.pipeline_router.parse_episode", new_callable=AsyncMock) as mock_pe:
         mock_pe.return_value = []
         r = await client.post("/pipeline/parse/ep1")
-    assert r.status_code == 200
-    assert "run_id" in r.json()
+        assert r.status_code == 200
+        assert "run_id" in r.json()
+        # The endpoint schedules the parse via asyncio.create_task (fire-and-forget).
+        # Drain that background task *while the mock is still active* — otherwise it
+        # escapes the patch context and calls the real parse_episode, which hits the
+        # real Qwen server and blocks the whole suite.
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if pending:
+            await asyncio.wait(pending, timeout=5)
+        assert mock_pe.await_count == 1
 
 
 @pytest.mark.asyncio
