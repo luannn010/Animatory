@@ -9,7 +9,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from animatory.chunker import chunk_file
@@ -79,7 +79,11 @@ class ParseRequest(BaseModel):
 
 
 @router.post("/parse/{episode_id}")
-async def parse_transcript(episode_id: str, request: Request, body: ParseRequest = ParseRequest()):
+async def parse_transcript(
+    episode_id: str,
+    request: Request,
+    body: ParseRequest = Body(default=ParseRequest()),
+):
     ep_dir = _processed_dir() / episode_id
     if not (ep_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
