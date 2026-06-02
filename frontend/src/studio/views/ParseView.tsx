@@ -5,6 +5,7 @@ import { studioApi } from '../api'
 import { phasePath } from '../phases'
 import { PhaseStepperBar } from '../components/PhaseStepperBar'
 import { SceneCard } from '../components/SceneCard'
+import { UploadTranscript } from '../../components/UploadTranscript'
 
 interface UploadedFile { name: string; size: string }
 
@@ -43,6 +44,8 @@ export function ParseView() {
       <p className="text-[11px] font-semibold uppercase tracking-wider text-[#3772cf] font-mono mb-0.5">Phase 1</p>
       <h1 className="text-xl font-semibold text-ink tracking-tight">Script Parsing</h1>
       <p className="text-sm text-steel mt-1 mb-6">Upload scripts or transcripts. The AI extracts scene clips automatically.</p>
+
+      <UploadTranscript />
 
       <button
         onClick={mockUpload}
