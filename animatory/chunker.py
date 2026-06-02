@@ -58,7 +58,8 @@ def chunk_text(
             boundary = end
             while boundary < n and not _ends_sentence(words[boundary - 1]):
                 boundary += 1
-            if boundary > end and (boundary - pos) > target_words + 500:
+            # warn if: boundary found but far, OR no boundary found and overrun is large
+            if (boundary - pos) > target_words + 500:
                 warned.add(len(records))
             end = boundary  # may equal n if no boundary found
 
@@ -67,7 +68,6 @@ def chunk_text(
         char_end = offsets[end - 1] + len(words[end - 1])
         chunk_text_str = text[char_start:char_end]
 
-        prev_start = records[-1].word_start if records else pos
         overlap = records[-1].word_end - pos if records else 0
         overlap = max(overlap, 0)
 
