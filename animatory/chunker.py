@@ -116,7 +116,7 @@ def chunk_text(
     if records:
         counts = [r.word_count for r in records]
         print(
-            f"Chunked → {len(records)} chunks  "
+            f"Chunked -> {len(records)} chunks  "
             f"Min: {min(counts)}  Avg: {sum(counts)//len(counts)}  Max: {max(counts)}"
         )
         for i in warned:
