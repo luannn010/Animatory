@@ -113,3 +113,26 @@ async def test_parse_episode_processes_all_chunks(tmp_path):
         await parse_episode("ep1", ep_dir)
 
     assert mock_pc.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_parse_episode_prefers_edited_text(tmp_path):
+    ep_dir = tmp_path / "ep1"
+    ep_dir.mkdir()
+    (ep_dir / "C001.txt").write_text("original text.", encoding="utf-8")
+    (ep_dir / "C001.edited.txt").write_text("cleaned text.", encoding="utf-8")
+    manifest = {
+        "source_file": "ep1.txt", "chunk_count": 1,
+        "chunks": [{"chunk_id": "C001", "file": "C001.txt", "char_start": 0, "char_end": 14}],
+    }
+    (ep_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    seen = {}
+    async def fake_parse_chunk(*, chunk_id, chunk_text, episode_id, output_dir, **kw):
+        seen["text"] = chunk_text
+        return output_dir / f"{chunk_id}_scenes.json"
+
+    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk):
+        await parse_episode("ep1", ep_dir)
+
+    assert seen["text"] == "cleaned text."

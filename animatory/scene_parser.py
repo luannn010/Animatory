@@ -166,7 +166,8 @@ async def parse_episode(
             "[parse_episode] episode=%s chunk %d/%d (%s)",
             episode_id, i, total, c["chunk_id"],
         )
-        txt_path = episode_dir / c["file"]
+        edited_path = episode_dir / f"{c['chunk_id']}.edited.txt"
+        txt_path = edited_path if edited_path.exists() else episode_dir / c["file"]
         chunk_text = txt_path.read_text(encoding="utf-8")
         path = await parse_chunk(
             chunk_id=c["chunk_id"],
