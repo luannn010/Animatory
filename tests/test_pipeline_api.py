@@ -250,3 +250,72 @@ async def test_put_text_unknown_chunk_404(client: AsyncClient, tmp_path, monkeyp
     await _chunk_one(client, tmp_path, monkeypatch, "te3")
     r = await client.put("/pipeline/episodes/te3/chunks/C999/text", json={"text": "x"})
     assert r.status_code == 404
+
+
+def _scene(cid, n="01", mood="calm"):
+    return {"scene_id": f"{cid}_S{n}", "location": "x", "characters": ["A"],
+            "shot_type": "wide", "action": "act", "dialogue": [], "mood": mood}
+
+
+async def _parse_one(client, tmp_path, cid, ep):
+    # Simulate a completed parse by writing the original scenes file.
+    doc = {"chunk_id": cid, "source_file": f"{ep}.txt", "model": "qwen3.5",
+           "parsed_at": "2026-06-02T10:00:00Z", "scenes": [_scene(cid)]}
+    (tmp_path / ep / f"{cid}_scenes.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_save_and_get_edited_scenes(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se1")
+    await _parse_one(client, tmp_path, cid, "se1")
+
+    r = await client.put(f"/pipeline/episodes/se1/chunks/{cid}/scenes",
+                         json={"scenes": [_scene(cid, mood="ominous")]})
+    assert r.status_code == 200
+    assert r.json()["edited"] is True
+
+    g = await client.get(f"/pipeline/episodes/se1/chunks/{cid}/scenes")
+    assert g.json()["edited"] is True
+    assert g.json()["scenes"][0]["mood"] == "ominous"
+
+
+@pytest.mark.asyncio
+async def test_put_scenes_unparsed_404(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se2")
+    r = await client.put(f"/pipeline/episodes/se2/chunks/{cid}/scenes",
+                         json={"scenes": [_scene(cid)]})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_put_scenes_invalid_body_422(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se3")
+    await _parse_one(client, tmp_path, cid, "se3")
+    r = await client.put(f"/pipeline/episodes/se3/chunks/{cid}/scenes",
+                         json={"scenes": [{"scene_id": "x"}]})  # missing required fields
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reset_edited_scenes(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se4")
+    await _parse_one(client, tmp_path, cid, "se4")
+    await client.put(f"/pipeline/episodes/se4/chunks/{cid}/scenes",
+                    json={"scenes": [_scene(cid, mood="ominous")]})
+
+    d = await client.delete(f"/pipeline/episodes/se4/chunks/{cid}/scenes/edited")
+    assert d.status_code == 200
+    assert d.json()["edited"] is False
+    assert d.json()["scenes"][0]["mood"] == "calm"
+
+
+@pytest.mark.asyncio
+async def test_chunks_listing_reflects_edited_scene_count(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se5")
+    await _parse_one(client, tmp_path, cid, "se5")  # 1 scene original
+    await client.put(f"/pipeline/episodes/se5/chunks/{cid}/scenes",
+                    json={"scenes": [_scene(cid), _scene(cid, n="02")]})  # 2 edited
+
+    chunks = (await client.get("/pipeline/episodes/se5/chunks")).json()["chunks"]
+    row = next(c for c in chunks if c["chunk_id"] == cid)
+    assert row["scene_count"] == 2

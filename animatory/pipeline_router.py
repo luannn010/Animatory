@@ -49,6 +49,20 @@ def _text_payload(ep_dir: Path, chunk_id: str, meta: dict) -> dict:
             "word_count": meta.get("word_count"), "text": text, "edited": is_edited}
 
 
+def _scenes_payload(ep_dir: Path, chunk_id: str) -> dict | None:
+    """Edited scenes doc if present, else original, else None (not parsed)."""
+    edited = ep_dir / f"{chunk_id}_scenes.edited.json"
+    original = ep_dir / f"{chunk_id}_scenes.json"
+    if edited.exists():
+        doc, is_edited = json.loads(edited.read_text(encoding="utf-8")), True
+    elif original.exists():
+        doc, is_edited = json.loads(original.read_text(encoding="utf-8")), False
+    else:
+        return None
+    doc["edited"] = is_edited
+    return doc
+
+
 def _episode_status(ep_dir: Path) -> dict:
     manifest_path = ep_dir / "manifest.json"
     if not manifest_path.exists():
@@ -119,6 +133,25 @@ class ParseRequest(BaseModel):
 
 class SaveTextRequest(BaseModel):
     text: str
+
+
+class SceneDialogueModel(BaseModel):
+    character: str
+    line: str
+
+
+class SceneModel(BaseModel):
+    scene_id: str
+    location: str
+    characters: list[str]
+    shot_type: str
+    action: str
+    dialogue: list[SceneDialogueModel]
+    mood: str
+
+
+class SaveScenesRequest(BaseModel):
+    scenes: list[SceneModel]
 
 
 @router.post("/parse/{episode_id}")
@@ -207,8 +240,10 @@ def _episode_chunks(ep_dir: Path) -> dict:
     chunks = []
     parsed_count = 0
     for c in manifest.get("chunks", []):
-        scenes_path = ep_dir / f"{c['chunk_id']}_scenes.json"
-        parsed = scenes_path.exists()
+        edited_path = ep_dir / f"{c['chunk_id']}_scenes.edited.json"
+        original_path = ep_dir / f"{c['chunk_id']}_scenes.json"
+        parsed = original_path.exists()
+        scenes_path = edited_path if edited_path.exists() else original_path
         scene_count: int | None = None
         if parsed:
             parsed_count += 1
@@ -253,26 +288,51 @@ async def list_episode_chunks(episode_id: str):
 async def get_chunk_scenes(episode_id: str, chunk_id: str):
     """Return the rendered shot list for a single parsed chunk.
 
-    Surfaces the contents of {chunk_id}_scenes.json so the frontend can show
-    scenes directly — no raw JSON in the UI. 409 if the chunk exists but has
-    not been parsed yet.
+    Prefers the edited scenes doc if present, else falls back to the original.
+    409 if the chunk exists but has not been parsed yet.
     """
     ep_dir = _processed_dir() / episode_id
-    if not (ep_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
-
-    manifest = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
-    if not any(c["chunk_id"] == chunk_id for c in manifest.get("chunks", [])):
-        raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' not found in episode '{episode_id}'")
-
-    scenes_path = ep_dir / f"{chunk_id}_scenes.json"
-    if not scenes_path.exists():
+    _chunk_meta(ep_dir, chunk_id)  # 404 if episode/chunk unknown
+    doc = _scenes_payload(ep_dir, chunk_id)
+    if doc is None:
         raise HTTPException(status_code=409, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    return doc
 
-    try:
-        return json.loads(scenes_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read scenes for '{chunk_id}': {exc}") from exc
+
+@router.put("/episodes/{episode_id}/chunks/{chunk_id}/scenes")
+async def save_chunk_scenes(episode_id: str, chunk_id: str, body: SaveScenesRequest):
+    ep_dir = _processed_dir() / episode_id
+    _chunk_meta(ep_dir, chunk_id)
+    original = ep_dir / f"{chunk_id}_scenes.json"
+    if not original.exists():
+        raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    base = json.loads(original.read_text(encoding="utf-8"))
+    doc = {
+        "chunk_id": chunk_id,
+        "source_file": base.get("source_file", f"{episode_id}.txt"),
+        "model": base.get("model", "manual"),
+        "parsed_at": base.get("parsed_at"),
+        "edited_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "scenes": [s.model_dump() for s in body.scenes],
+    }
+    (ep_dir / f"{chunk_id}_scenes.edited.json").write_text(
+        json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info("[scenes] episode=%s chunk=%s saved %d edited scene(s)",
+                episode_id, chunk_id, len(doc["scenes"]))
+    return _scenes_payload(ep_dir, chunk_id)
+
+
+@router.delete("/episodes/{episode_id}/chunks/{chunk_id}/scenes/edited")
+async def reset_chunk_scenes(episode_id: str, chunk_id: str):
+    ep_dir = _processed_dir() / episode_id
+    _chunk_meta(ep_dir, chunk_id)
+    edited = ep_dir / f"{chunk_id}_scenes.edited.json"
+    if edited.exists():
+        edited.unlink()
+    doc = _scenes_payload(ep_dir, chunk_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    return doc
 
 
 @router.get("/episodes/{episode_id}/chunks/{chunk_id}/text")
