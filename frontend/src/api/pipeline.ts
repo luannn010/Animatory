@@ -3,6 +3,7 @@ import { API_BASE_URL } from '../config'
 
 export interface ChunkResult {
   episode_id: string
+  display_name: string
   chunk_count: number
   output_dir: string
 }
@@ -13,6 +14,7 @@ export interface ParseResult {
 
 export interface EpisodeStatus {
   episode_id: string
+  display_name: string | null
   chunk_count: number
   parsed_count: number
   status: 'chunked' | 'partial' | 'complete' | 'empty'
@@ -55,6 +57,7 @@ export interface ChunkScenes {
   model: string
   parsed_at: string
   scenes: PipelineScene[]
+  edited: boolean
 }
 
 export interface ChunkText {
@@ -62,17 +65,21 @@ export interface ChunkText {
   file: string
   word_count: number | null
   text: string
+  edited: boolean
 }
 
 export async function chunkTranscript(
   file: File,
   episodeId?: string,
+  name?: string,
 ): Promise<ChunkResult> {
   const form = new FormData()
   form.append('file', file)
-  const url = episodeId
-    ? `${API_BASE_URL}/pipeline/chunk?episode_id=${encodeURIComponent(episodeId)}`
-    : `${API_BASE_URL}/pipeline/chunk`
+  const params = new URLSearchParams()
+  if (episodeId) params.set('episode_id', episodeId)
+  if (name) params.set('name', name)
+  const qs = params.toString()
+  const url = `${API_BASE_URL}/pipeline/chunk${qs ? `?${qs}` : ''}`
   const res = await fetch(url, { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text()
@@ -137,4 +144,81 @@ export async function getChunkText(
     throw new Error(`getChunkText failed ${res.status}: ${text}`)
   }
   return res.json()
+}
+
+export interface TextCorrection {
+  find: string
+  replace: string
+  rationale: string
+  all_occurrences: boolean
+}
+
+export interface ScenePatch {
+  scene_id: string
+  changes: Partial<Omit<PipelineScene, 'scene_id'>>
+  rationale: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface RefineResult {
+  reply: string
+  corrections?: TextCorrection[]
+  proposals?: ScenePatch[]
+}
+
+function chunkBase(episodeId: string, chunkId: string): string {
+  return `${API_BASE_URL}/pipeline/episodes/${encodeURIComponent(episodeId)}/chunks/${encodeURIComponent(chunkId)}`
+}
+
+async function jsonOrThrow<T>(res: Response, label: string): Promise<T> {
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`${label} failed ${res.status}: ${text}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export async function saveText(episodeId: string, chunkId: string, text: string): Promise<ChunkText> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/text`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  return jsonOrThrow<ChunkText>(res, 'saveText')
+}
+
+export async function resetText(episodeId: string, chunkId: string): Promise<ChunkText> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/text/edited`, { method: 'DELETE' })
+  return jsonOrThrow<ChunkText>(res, 'resetText')
+}
+
+export async function saveScenes(
+  episodeId: string, chunkId: string, scenes: PipelineScene[],
+): Promise<ChunkScenes> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/scenes`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenes }),
+  })
+  return jsonOrThrow<ChunkScenes>(res, 'saveScenes')
+}
+
+export async function resetScenes(episodeId: string, chunkId: string): Promise<ChunkScenes> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/scenes/edited`, { method: 'DELETE' })
+  return jsonOrThrow<ChunkScenes>(res, 'resetScenes')
+}
+
+export async function refineChat(
+  episodeId: string, chunkId: string, messages: ChatMessage[], target: 'text' | 'scenes',
+): Promise<RefineResult> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/refine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, target }),
+  })
+  return jsonOrThrow<RefineResult>(res, 'refineChat')
 }
