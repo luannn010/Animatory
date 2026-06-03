@@ -1,5 +1,5 @@
 // frontend/src/studio/views/ChapterView.tsx
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   getChunkScenes, getChunkText, parseEpisode, refineChat,
@@ -43,6 +43,7 @@ export function ChapterView() {
   const [parsing, setParsing] = useState(false)
   const [parseProgress, setParseProgress] = useState<{ done: number; total: number } | null>(null)
   const [skipped, setSkipped] = useState(0)
+  const parseEsRef = useRef<{ close(): void } | null>(null)
 
   const textDirty = text !== textBaseline
   const scenesDirty = JSON.stringify(scenes) !== sceneBaseline
@@ -78,6 +79,9 @@ export function ChapterView() {
   // Auto-follow target with parse state (still user-switchable).
   useEffect(() => { setTarget(parsed ? 'scenes' : 'text') }, [parsed])
 
+  // Close any in-flight parse stream on unmount.
+  useEffect(() => () => { parseEsRef.current?.close() }, [])
+
   // --- Text actions ---
   function acceptCorrection(c: TextCorrection) {
     setText(t => applyCorrection(t, c))
@@ -108,6 +112,7 @@ export function ChapterView() {
       if (parsed && scenesEdited) await resetScenes(episodeId, chunkId).catch(() => {})
       const { run_id } = await parseEpisode(episodeId, [chunkId])
       const es = api.streamRun(run_id)
+      parseEsRef.current = es
       es.addEventListener('message', (ev: Event) => {
         try {
           const event = JSON.parse((ev as MessageEvent).data as string)
@@ -116,11 +121,11 @@ export function ChapterView() {
             if (m) setParseProgress({ done: Number(m[1]), total: Number(m[2]) })
           }
           if (event.type === 'complete') {
-            es.close(); setParsing(false); setParseProgress(null)
+            es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
             setProposals({}); loadScenes()
           }
-          if (event.data?.status === 'failed') {
-            es.close(); setParsing(false); setParseProgress(null)
+          if (event.type === 'status' && event.data?.status === 'failed') {
+            es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
           }
         } catch { /* ignore */ }
       })
@@ -132,9 +137,12 @@ export function ChapterView() {
     setScenes(ss => ss.map(s => (s.scene_id === next.scene_id ? next : s)))
     setEditing(prev => { const n = new Set(prev); n.delete(next.scene_id); return n })
   }
-  function acceptProposal(p: ScenePatch) {
-    setScenes(ss => ss.map(s => (s.scene_id === p.scene_id ? { ...s, ...p.changes } : s)))
-    setProposals(prev => { const n = { ...prev }; delete n[p.scene_id]; return n })
+  function acceptProposal(sceneId: string) {
+    setProposals(prev => {
+      const p = prev[sceneId]
+      if (p) setScenes(ss => ss.map(s => (s.scene_id === sceneId ? { ...s, ...p.changes } : s)))
+      const n = { ...prev }; delete n[sceneId]; return n
+    })
   }
   function rejectProposal(sceneId: string) {
     setProposals(prev => { const n = { ...prev }; delete n[sceneId]; return n })
@@ -251,7 +259,7 @@ export function ChapterView() {
                       onEdit={() => setEditing(prev => new Set(prev).add(s.scene_id))}
                       onCancel={() => setEditing(prev => { const n = new Set(prev); n.delete(s.scene_id); return n })}
                       onSaveLocal={saveLocalScene}
-                      onAcceptProposal={() => acceptProposal(proposals[s.scene_id])}
+                      onAcceptProposal={() => acceptProposal(s.scene_id)}
                       onRejectProposal={() => rejectProposal(s.scene_id)}
                     />
                   ))}
