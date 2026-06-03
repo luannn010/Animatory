@@ -278,6 +278,15 @@ Added to `animatory/server.py`. The two new pipeline routes sit alongside existi
 
 Status values: `"chunked"` (manifest exists, no scene files yet), `"partial"` (some parsed), `"complete"` (all chunks have `_scenes.json`).
 
+### `GET /pipeline/episodes/{episode_id}/chunks/{chunk_id}/scenes`
+
+- **Response:** the parsed contents of `{chunk_id}_scenes.json` (`chunk_id`,
+  `source_file`, `model`, `parsed_at`, `scenes[]`).
+- **Errors:** `404` if the episode isn't chunked or the chunk isn't in the
+  manifest; `409` if the chunk exists but hasn't been parsed yet.
+- **Behaviour:** Read-only. Surfaces the shot list so the frontend can render
+  scenes directly — the raw JSON file is never shown in the UI.
+
 ---
 
 ## CLI Subcommand: `animatory chunk`
@@ -303,37 +312,79 @@ python -m animatory.cli chunk ep1.txt --output-dir processed --self-test
 
 ## Frontend: Upload Card Component
 
-A self-contained `UploadTranscript` component added to the existing home/dashboard page (no new route).
+A self-contained `UploadTranscript` component rendered inside the studio Parse
+view (no new route).
+
+**Flow note (supersedes the original auto-parse design):** chunking and parsing
+are now **two explicit steps**, not one. The upload card only chunks; a separate
+`ParseChunks` card drives parsing per-chunk or in bulk. This keeps the
+expensive Qwen pass out of the upload path and lets the user inspect chunks
+first.
 
 ### Layout
 
 ```
 ┌─────────────────────────────────────────┐
-│  Upload Transcript                       │
+│  Upload & Chunk Transcript               │
 │                                          │
 │  [ Drop .txt file or click to browse ]  │
 │                                          │
+│  ── On file select (in-browser skim) ──  │
+│  Size   Words   Characters   Language    │
+│  487 KB 88,919  500,000      Vietnamese  │
+│                              (detected)  │
+│                                          │
 │  Episode name: [ep1          ]           │
 │                                          │
-│  [ Process Transcript ]                  │
+│  [ Chunk Transcript ]                    │
 │                                          │
-│  ── Progress ──────────────────────────  │
-│  ✓ Chunked: 20 chunks                   │
-│  ⟳ Parsing C007 / 20...                 │
+│  ✓ Chunked into 20 file(s) — parse below │
+└─────────────────────────────────────────┘
+        ↓ (episodeId set)
+┌─────────────────────────────────────────┐
+│  ParseChunks — per-chunk parse table     │
 └─────────────────────────────────────────┘
 ```
 
 ### Behaviour
 
-1. User drops or selects a `.txt` file → episode name auto-fills from filename stem
-2. "Process Transcript" → `POST /pipeline/chunk` (multipart) → on success, immediately calls `POST /pipeline/parse/{episode_id}`
-3. SSE stream from `/runs/{run_id}/stream` drives the progress log — reuses existing `useRunStream` hook
-4. On completion, a "View Results" link appears pointing to the episode's folder listing (future phase)
+1. User drops or selects a `.txt` file → episode name auto-fills from filename
+   stem, **and** the file is read in-browser (`file.text()`) to populate a
+   preview panel: byte **size**, **word count**, **character count**, and a
+   heuristic **language** guess (labeled "detected"). No network call yet.
+   While reading, a skeleton is shown; an unreadable file shows an inline error.
+2. "Chunk Transcript" → `POST /pipeline/chunk` (multipart). On success, sets
+   `episodeId` and renders the `ParseChunks` card. **Parsing is NOT triggered
+   automatically.**
+3. Parsing is driven separately in `ParseChunks` (`POST /pipeline/parse/{id}`),
+   with the SSE stream from `/runs/{run_id}/stream` driving its progress log.
+4. **Viewing scenes:** each parsed chunk row in `ParseChunks` is clickable and
+   expands inline (accordion) to show its shot list as designed scene cards —
+   never raw JSON. Scenes are lazy-loaded on first expand via
+   `GET /pipeline/episodes/{id}/chunks/{chunk_id}/scenes` and cached; the panel
+   has its own loading skeleton, empty ("no scenes extracted"), and error
+   (with retry) states. Un-parsed chunks are not expandable. Each scene card
+   shows: `action` (headline), `location` / `characters` / `mood` tags,
+   `shot_type`, and the `dialogue` lines. Rendered by
+   `frontend/src/components/SceneList.tsx`.
+
+### Language heuristic
+
+Client-side, dependency-free (`frontend/src/components/transcriptMetrics.ts`).
+Skims the first ~4000 chars, counts letters by script, and returns a display
+label: **Vietnamese** (Latin text with Vietnamese diacritics), **English /
+Latin**, **Chinese/Japanese/Korean**, **Russian / Cyrillic**, **Arabic**, or
+**Unknown**. Approximate by design — never treated as authoritative.
 
 ### Files
 
-- `frontend/src/components/UploadTranscript.tsx` — the card component
-- `frontend/src/api/index.ts` — two new API calls: `chunkTranscript()`, `parseEpisode()`
+- `frontend/src/components/UploadTranscript.tsx` — upload + chunk card
+- `frontend/src/components/ParseChunks.tsx` — separate per-chunk parse card with
+  expandable per-chunk scene view
+- `frontend/src/components/SceneList.tsx` — renders a chunk's shot list as scene cards
+- `frontend/src/components/transcriptMetrics.ts` — pure size/count/language helpers
+- `frontend/src/api/pipeline.ts` — pipeline API calls (`chunkTranscript()`,
+  `parseEpisode()`, `listChunks()`, `listEpisodes()`)
 
 ---
 

@@ -32,6 +32,25 @@ from animatory.studio.store import StudioStore
 logger = logging.getLogger(__name__)
 
 
+def _configure_logging() -> None:
+    """Ensure animatory.* INFO logs are visible alongside uvicorn's output.
+
+    Uvicorn does not configure application loggers, so without this the
+    pipeline/scene-parser INFO logs (endpoint, stage, real error) are dropped.
+    """
+    level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    app_logger = logging.getLogger("animatory")
+    if not app_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        app_logger.addHandler(handler)
+        app_logger.propagate = False
+    app_logger.setLevel(level)
+
+
+_configure_logging()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yaml_path = os.environ.get("ANIMATORY_YAML_PATH", "agent-framework.yaml")
@@ -51,12 +70,17 @@ async def lifespan(app: FastAPI):
             "orchestration": LlamaCppExecutor(),
         }
 
+    studio_store = StudioStore(db_path=db_path)
+    await studio_store.init()
+
     app.state.registry = registry
     app.state.store = store
     app.state.executor_map = executor_map
-    app.state.studio_store = StudioStore()
+    app.state.studio_store = studio_store
 
     yield
+
+    await studio_store.close()
 
 
 app = FastAPI(title="Animatory Backend", version="0.1.0", lifespan=lifespan)
@@ -134,7 +158,7 @@ async def run_agent(agent_id: str, request: RunRequest):
         run_id=run_id,
         agent_id=agent_id,
         status=RunStatusEnum.queued,
-        started_at=datetime.datetime.utcnow(),
+        started_at=datetime.datetime.now(datetime.timezone.utc),
         episode_id=request.context.get("episode_id"),
         phase=request.context.get("phase"),
         track=request.context.get("track"),
@@ -158,17 +182,17 @@ async def _agent_run_with_existing_record(agent: BaseAgent, request: RunRequest,
     store = agent.store
     definition = agent.definition
     run_id = record.run_id
-    now = record.started_at or datetime.datetime.utcnow()
+    now = record.started_at or datetime.datetime.now(datetime.timezone.utc)
 
     required = [inp.name for inp in definition.inputs if inp.required]
     missing = [name for name in required if name not in request.context]
     if missing:
-        await store.update(run_id, status=RunStatusEnum.failed, error=f"Missing required inputs: {missing}", finished_at=datetime.datetime.utcnow())
+        await store.update(run_id, status=RunStatusEnum.failed, error=f"Missing required inputs: {missing}", finished_at=datetime.datetime.now(datetime.timezone.utc))
         return
 
     for cond in definition.preconditions:
         if not agent._check_precondition(cond, request.context):
-            await store.update(run_id, status=RunStatusEnum.failed, error=f"Precondition failed: {cond}", finished_at=datetime.datetime.utcnow())
+            await store.update(run_id, status=RunStatusEnum.failed, error=f"Precondition failed: {cond}", finished_at=datetime.datetime.now(datetime.timezone.utc))
             return
 
     max_attempts = max(definition.retry.max_attempts, 1)
@@ -188,23 +212,23 @@ async def _agent_run_with_existing_record(agent: BaseAgent, request: RunRequest,
             msg = f"Timed out on attempt {attempt}"
             if attempt < max_attempts:
                 continue
-            await store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=datetime.datetime.utcnow())
+            await store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=datetime.datetime.now(datetime.timezone.utc))
             return
         except Exception as exc:
             msg = str(exc)
             if attempt < max_attempts:
                 continue
-            await store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=datetime.datetime.utcnow())
+            await store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=datetime.datetime.now(datetime.timezone.utc))
             return
 
         if result.error:
             if attempt < max_attempts:
                 continue
-            await store.update(run_id, status=RunStatusEnum.failed, error=result.error, finished_at=datetime.datetime.utcnow())
+            await store.update(run_id, status=RunStatusEnum.failed, error=result.error, finished_at=datetime.datetime.now(datetime.timezone.utc))
             return
         break
 
-    finished_at = datetime.datetime.utcnow()
+    finished_at = datetime.datetime.now(datetime.timezone.utc)
     duration_s = (finished_at - now).total_seconds()
     acceptance_passed = True
 

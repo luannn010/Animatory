@@ -1,0 +1,67 @@
+<h2>Which layout for the /docs page?</h2>
+<p class="subtitle">Two tab options — Pipeline Reference + Agent Detail Cards. How should the overall page be structured?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f2029;border-radius:8px;padding:16px;font-family:monospace;font-size:11px;color:#7ca9b5;">
+        <div style="display:flex;gap:12px;border-bottom:1px solid #1e3a4a;padding-bottom:8px;margin-bottom:12px;">
+          <span style="color:#4ecdc4;border-bottom:2px solid #4ecdc4;padding-bottom:6px;">Pipeline</span>
+          <span style="color:#7ca9b5;">Agent Cards</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="background:#1a3d4a;border-radius:4px;padding:8px;font-size:10px;color:#c5dde6;">
+            script.txt → [orch.showrunner] → breakdown.json
+          </div>
+          <div style="text-align:center;color:#4ecdc4;font-size:10px;">↓</div>
+          <div style="display:flex;gap:6px;">
+            <div style="flex:1;background:#1a2d3a;border-radius:4px;padding:6px;font-size:9px;color:#7ca9b5;">[design.lineart]</div>
+            <div style="flex:1;background:#1a2d3a;border-radius:4px;padding:6px;font-size:9px;color:#7ca9b5;">[board.storyboard]</div>
+            <div style="flex:1;background:#1a2d3a;border-radius:4px;padding:6px;font-size:9px;color:#7ca9b5;">[cast.dialogue]</div>
+          </div>
+          <div style="text-align:center;color:#4ecdc4;font-size:10px;">↓</div>
+          <div style="background:#1a3d4a;border-radius:4px;padding:8px;font-size:10px;color:#c5dde6;">
+            [exec.animation] → [exec.vfx] → [exec.mix_deliver]
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Flow Diagram + Cards</h3>
+      <p>Pipeline tab shows a top-down flow diagram tracing script→delivery. Agent Cards tab shows cards grouped by stack with full detail (inputs, outputs, acceptance, retry).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f2029;border-radius:8px;padding:16px;font-family:monospace;font-size:11px;color:#7ca9b5;">
+        <div style="display:flex;gap:12px;border-bottom:1px solid #1e3a4a;padding-bottom:8px;margin-bottom:12px;">
+          <span style="color:#4ecdc4;border-bottom:2px solid #4ecdc4;padding-bottom:6px;">Pipeline</span>
+          <span style="color:#7ca9b5;">Agent Cards</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="width:110px;flex-shrink:0;">
+            <div style="font-size:9px;color:#4ecdc4;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Phases</div>
+            <div style="background:#1a3d4a;border-radius:3px;padding:5px 8px;font-size:9px;color:#c5dde6;margin-bottom:3px;">Pre-production</div>
+            <div style="background:#162d3a;border-radius:3px;padding:5px 8px;font-size:9px;color:#7ca9b5;margin-bottom:3px;">Production</div>
+            <div style="background:#162d3a;border-radius:3px;padding:5px 8px;font-size:9px;color:#7ca9b5;">Post-production</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:9px;color:#4ecdc4;margin-bottom:6px;">Pre-production agents</div>
+            <div style="background:#1a2d3a;border-radius:3px;padding:5px;font-size:9px;color:#7ca9b5;margin-bottom:3px;">orch.showrunner — parses script</div>
+            <div style="background:#1a2d3a;border-radius:3px;padding:5px;font-size:9px;color:#7ca9b5;margin-bottom:3px;">design.lineart — model sheets</div>
+            <div style="background:#1a2d3a;border-radius:3px;padding:5px;font-size:9px;color:#7ca9b5;">board.storyboard — animatic</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Phase List + Cards</h3>
+      <p>Pipeline tab shows agents grouped into pre-production / production / post-production phases with a table/list format. Agent Cards tab same as A.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Click your preferred layout — or describe what you're imagining in the terminal.</p>

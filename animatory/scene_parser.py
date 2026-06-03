@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,12 +57,23 @@ async def parse_chunk(
     retries = max_retries if max_retries is not None else int(os.environ.get("QWEN_MAX_RETRIES", "3"))
     timeout_s = float(os.environ.get("QWEN_TIMEOUT_S", "120"))
 
+    # Qwen3.5 emits chain-of-thought (reasoning_content) by default, which makes
+    # generation far slower and can blow past the timeout. We only want the JSON,
+    # so disable thinking unless explicitly re-enabled via QWEN_ENABLE_THINKING=1.
+    enable_thinking = os.environ.get("QWEN_ENABLE_THINKING", "0") == "1"
+
     prompt = _PROMPT_TEMPLATE.format(chunk_id=chunk_id, chunk_text=chunk_text)
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
+        "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
+
+    logger.info(
+        "[parse_chunk] chunk=%s episode=%s endpoint=%s model=%s chars=%d retries=%d timeout=%.0fs thinking=%s",
+        chunk_id, episode_id, endpoint, model_name, len(chunk_text), retries, timeout_s, enable_thinking,
+    )
 
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -76,12 +88,32 @@ async def parse_chunk(
                 cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
                 cleaned = re.sub(r"\s*```$", "", cleaned)
                 scenes_data = json.loads(cleaned)
+                logger.info("[parse_chunk] chunk=%s attempt %d/%d OK", chunk_id, attempt, retries)
                 break
-        except (json.JSONDecodeError, KeyError, httpx.HTTPError) as exc:
-            logger.warning("%s attempt %d/%d failed: %s", chunk_id, attempt, retries, exc)
+        except httpx.HTTPError as exc:
+            # Connection/transport/HTTP-status error — the endpoint is unreachable or unhealthy.
+            # repr() is used because ReadError/ConnectError stringify to an empty message.
+            logger.warning(
+                "[parse_chunk] chunk=%s attempt %d/%d: cannot reach Qwen at %s -> %s",
+                chunk_id, attempt, retries, endpoint, repr(exc),
+            )
+            last_exc = exc
+        except (json.JSONDecodeError, KeyError) as exc:
+            # Endpoint responded but the body was not the JSON we expected.
+            logger.warning(
+                "[parse_chunk] chunk=%s attempt %d/%d: invalid response from Qwen -> %s",
+                chunk_id, attempt, retries, repr(exc),
+            )
             last_exc = exc
     else:
-        raise ValueError(f"Failed to parse JSON from Qwen for {chunk_id} after {retries} attempts") from last_exc
+        if isinstance(last_exc, httpx.HTTPError):
+            reason = f"could not reach Qwen endpoint {endpoint}/v1/chat/completions"
+        else:
+            reason = "could not parse JSON from Qwen response"
+        raise ValueError(
+            f"{reason} for {chunk_id} after {retries} attempts "
+            f"(last error: {type(last_exc).__name__}: {last_exc})"
+        ) from last_exc
 
     out_path = output_dir / f"{chunk_id}_scenes.json"
     result = {
@@ -92,8 +124,11 @@ async def parse_chunk(
         "scenes": scenes_data.get("scenes", []),
     }
     out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info("Wrote %s (%d scenes)", out_path, len(result["scenes"]))
+    logger.info("[parse_chunk] chunk=%s wrote %s (%d scenes)", chunk_id, out_path, len(result["scenes"]))
     return out_path
+
+
+ProgressFn = Callable[[int, int, str], Awaitable[None]]
 
 
 async def parse_episode(
@@ -101,8 +136,14 @@ async def parse_episode(
     episode_dir: Path,
     chunk_ids: list[str] | None = None,
     qwen_endpoint: str | None = None,
+    on_progress: ProgressFn | None = None,
 ) -> list[Path]:
-    """Parse all (or selected) chunks in episode_dir. Returns list of written paths."""
+    """Parse all (or selected) chunks in episode_dir. Returns list of written paths.
+
+    If ``on_progress`` is given it is awaited with ``(done, total, chunk_id)``:
+    once at the start as ``(0, total, "")`` and after each chunk completes. This
+    drives the live progress bar/logs in the UI (progress == chunks done / total).
+    """
     manifest_path = episode_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
@@ -110,9 +151,21 @@ async def parse_episode(
         c for c in manifest["chunks"]
         if chunk_ids is None or c["chunk_id"] in chunk_ids
     ]
+    total = len(chunks_to_parse)
+
+    logger.info(
+        "[parse_episode] episode=%s dir=%s parsing %d/%d chunk(s)",
+        episode_id, episode_dir, total, len(manifest["chunks"]),
+    )
+    if on_progress is not None:
+        await on_progress(0, total, "")
 
     results = []
-    for c in chunks_to_parse:
+    for i, c in enumerate(chunks_to_parse, 1):
+        logger.info(
+            "[parse_episode] episode=%s chunk %d/%d (%s)",
+            episode_id, i, total, c["chunk_id"],
+        )
         txt_path = episode_dir / c["file"]
         chunk_text = txt_path.read_text(encoding="utf-8")
         path = await parse_chunk(
@@ -123,5 +176,8 @@ async def parse_episode(
             qwen_endpoint=qwen_endpoint,
         )
         results.append(path)
+        if on_progress is not None:
+            await on_progress(i, total, c["chunk_id"])
 
+    logger.info("[parse_episode] episode=%s done: wrote %d file(s)", episode_id, len(results))
     return results

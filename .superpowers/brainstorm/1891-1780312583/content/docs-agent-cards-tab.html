@@ -1,0 +1,121 @@
+<h2>Agent Cards Tab — Detail View</h2>
+<p class="subtitle">Cards grouped by stack. Each card shows role, inputs/outputs, acceptance criteria, and retry policy.</p>
+
+<div class="mockup">
+  <div class="mockup-header">/docs — Agent Detail Cards tab</div>
+  <div class="mockup-body" style="background:#0f2029;padding:24px;font-family:'Inter',sans-serif;">
+
+    <!-- Tab bar -->
+    <div style="display:flex;gap:0;border-bottom:1px solid #1e3a4a;margin-bottom:24px;">
+      <div style="padding:8px 20px;font-size:13px;color:#4a7a8a;">Pipeline Reference</div>
+      <div style="padding:8px 20px;font-size:13px;font-weight:600;color:#4ecdc4;border-bottom:2px solid #4ecdc4;">Agent Detail Cards</div>
+    </div>
+
+    <!-- Stack section: Orchestration -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4a7a8a;border-bottom:1px solid #1e3a4a;padding-bottom:6px;margin-bottom:12px;">Orchestration</div>
+
+      <!-- Agent card: orch.showrunner -->
+      <div style="background:#132030;border:1px solid #1e3a4a;border-radius:8px;padding:14px 16px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#4ecdc4;font-family:monospace;">orch.showrunner</div>
+            <div style="font-size:11px;color:#7ca9b5;margin-top:2px;">Producer / Script Breakdown</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <span style="font-size:9px;background:#1a3d4a;color:#4ecdc4;padding:2px 7px;border-radius:10px;">orchestration</span>
+            <span style="font-size:9px;background:#162030;color:#7ca9b5;padding:2px 7px;border-radius:10px;">manual</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#7ca9b5;margin-bottom:10px;">Parse script, build asset breakdown, spawn tracks, gate handoffs</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:10px;">
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Inputs</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#c5dde6;font-family:monospace;">final_script · text</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Outputs</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#c5dde6;font-family:monospace;">breakdown.json</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Acceptance</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#a3d9a5;font-size:9px;">every script entity in breakdown</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent card: gate.checking -->
+      <div style="background:#132030;border:1px solid #2a4a30;border-radius:8px;padding:14px 16px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#f59e0b;font-family:monospace;">gate.checking</div>
+            <div style="font-size:11px;color:#7ca9b5;margin-top:2px;">Checking / Final Materials Ship</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <span style="font-size:9px;background:#2a3020;color:#f59e0b;padding:2px 7px;border-radius:10px;">gate</span>
+            <span style="font-size:9px;background:#3a1a1a;color:#f87171;padding:2px 7px;border-radius:10px;">on_fail: escalate</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#7ca9b5;margin-bottom:10px;">Cross-check animatic vs designs, validate completeness, package for vendor</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:10px;">
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Preconditions</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#fcd34d;font-size:9px;">all 3 tracks reported done</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Outputs</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#c5dde6;font-family:monospace;">vendor_package.zip</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Acceptance</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#a3d9a5;font-size:9px;">no omitted assets · self-contained</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stack section: ComfyUI -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4a7a8a;border-bottom:1px solid #1e3a4a;padding-bottom:6px;margin-bottom:12px;">ComfyUI / Motion</div>
+
+      <div style="background:#132030;border:1px solid #1e3a4a;border-radius:8px;padding:14px 16px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#60a5fa;font-family:monospace;">exec.animation</div>
+            <div style="font-size:11px;color:#7ca9b5;margin-top:2px;">Physical Animation + Lip-sync</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <span style="font-size:9px;background:#162030;color:#60a5fa;padding:2px 7px;border-radius:10px;">comfyui</span>
+            <span style="font-size:9px;background:#1a1a2a;color:#a78bfa;padding:2px 7px;border-radius:10px;">GPU required</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#7ca9b5;margin-bottom:10px;">Block action, draw in-betweens, animate lip-flap</div>
+        <div style="margin-bottom:8px;display:flex;gap:5px;">
+          <span style="font-size:9px;background:#162030;color:#4a7a8a;padding:2px 7px;border-radius:10px;font-family:monospace;">anim_block.json</span>
+          <span style="font-size:9px;background:#162030;color:#4a7a8a;padding:2px 7px;border-radius:10px;font-family:monospace;">anim_inbetween.json</span>
+          <span style="font-size:9px;background:#162030;color:#4a7a8a;padding:2px 7px;border-radius:10px;font-family:monospace;">anim_lipsync.json</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:10px;">
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Inputs</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#c5dde6;font-size:9px;line-height:1.6;">rigs · animatic<br>mouth_charts · dialogue</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Outputs</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#c5dde6;font-family:monospace;">take1_shots/</div>
+          </div>
+          <div>
+            <div style="color:#4a7a8a;text-transform:uppercase;font-size:9px;letter-spacing:1px;margin-bottom:4px;">Acceptance</div>
+            <div style="background:#0f1a25;border-radius:4px;padding:5px 8px;color:#a3d9a5;font-size:9px;">smooth motion · lip-flap matches</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- "..." to indicate more cards below -->
+    <div style="text-align:center;color:#4a7a8a;font-size:12px;letter-spacing:2px;">· · · 11 more agents · · ·</div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does this card design work for you? Any fields you want added, removed, or laid out differently?</p>

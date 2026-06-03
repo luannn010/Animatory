@@ -1,0 +1,234 @@
+{
+  "chunk_id": "C001",
+  "source_file": "ep1.txt",
+  "model": "Qwen3.5-4B-Q4_K_M.gguf",
+  "parsed_at": "2026-06-03T12:14:09.899530+00:00",
+  "scenes": [
+    {
+      "scene_id": "C001_S01",
+      "location": "Bedroom in Princess Cao's Palace",
+      "characters": [
+        "Tư An",
+        "Tiêu Lan Nhi"
+      ],
+      "shot_type": "wide",
+      "action": "Tiêu Lan Nhi threatens to cut off Tư An's hands with scissors while he is tied to the bed; Tư An warns her of murder charges.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Cô làm vậy là mưu sát chồng đó, biết không? Nếu cô mà cắt xuống thật thì cả đời hạnh phúc của cô cũng xong luôn đấy."
+        },
+        {
+          "character": "Tiêu Lan Nhi",
+          "line": "Yên tâm, sau khi thiến ngươi xong, bản cung vẫn sẽ lấy ngươi, còn về chuyện hạnh phúc cả đời của bản cung, ngươi chẳng lẽ không biết bản cung có thể nuôi nam sủng sao?"
+        },
+        {
+          "character": "Tư An",
+          "line": "Đồ khốn, còn chưa cưới mà đã muốn cắm sừng tà, coi ta là đồ trang trí chắc được."
+        }
+      ],
+      "mood": "Tense, Dangerous"
+    },
+    {
+      "scene_id": "C001_S02",
+      "location": "Bedroom in Princess Cao's Palace",
+      "characters": [
+        "Tư An",
+        "Tiêu Lan Nhi"
+      ],
+      "shot_type": "close-up",
+      "action": "Tư An breaks free, strangles Tiêu Lan Nhi, cuts her restraints, stuffs a sheet in her mouth, and slaps her.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Dám uy hiếp ra ta, cô có biết cái gì gọi là lấy chồng làm đầu Tam Tòng Tứ Đức không hả?"
+        },
+        {
+          "character": "Tiêu Lan Nhi",
+          "line": "Ưm ưm ưm."
+        }
+      ],
+      "mood": "Violent, Humiliating"
+    },
+    {
+      "scene_id": "C001_S03",
+      "location": "Bedroom in Princess Cao's Palace",
+      "characters": [
+        "Tư An",
+        "Tiêu Lan Nhi"
+      ],
+      "shot_type": "medium",
+      "action": "Tư An leaves the room, leaving Tiêu Lan Nhi struggling on the floor.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Hôm nay ra ta còn có việc, không chơi với cô nữa, tạm biệt nhé."
+        }
+      ],
+      "mood": "Dismissive"
+    },
+    {
+      "scene_id": "C001_S04",
+      "location": "Outside Princess Cao's Palace",
+      "characters": [
+        "Tư An",
+        "Triệu Cao",
+        "Trương An Thế",
+        "Group of friends"
+      ],
+      "shot_type": "wide",
+      "action": "Tư An escapes the palace, meets his friends, and confronts Triệu Cao and Trương An Thế in the street.",
+      "dialogue": [
+        {
+          "character": "Triệu Cao",
+          "line": "Ta đánh ngươi đấy thì sao? Đồ khốn, dám lừa ta hả? Ngươi có biết ta suýt nữa bị đánh chết không?"
+        },
+        {
+          "character": "Tư An",
+          "line": "Ngươi điên rồi? Dám đánh ta!"
+        }
+      ],
+      "mood": "Confrontational"
+    },
+    {
+      "scene_id": "C001_S05",
+      "location": "Street",
+      "characters": [
+        "Tư An",
+        "Trương An Thế",
+        "Triệu Cao",
+        "Group of friends"
+      ],
+      "shot_type": "medium",
+      "action": "Tư An argues with Trương An Thế about the conspiracy; friends start fighting Trương An Thế.",
+      "dialogue": [
+        {
+          "character": "Trương An Thế",
+          "line": "Tiểu công gia tử, ngươi là hoàng thân quốc thích, lại tụ tập người đánh nhau ngay giữa phố, đặt luật pháp đại cản ta ở đâu?"
+        },
+        {
+          "character": "Tư An",
+          "line": "Các huynh đệ, đừng nghe lão già này lải nhải, lão ta với Triệu Cao thông đồng với nhau, mục đích là muốn chơi ta một phố liên hoàn kế."
+        }
+      ],
+      "mood": "Aggressive, Suspenseful"
+    },
+    {
+      "scene_id": "C001_S06",
+      "location": "Street",
+      "characters": [
+        "Tư An",
+        "Triệu Cao",
+        "Trương An Thế",
+        "Group of friends"
+      ],
+      "shot_type": "close-up",
+      "action": "Triệu Cao and Trương An Thế are beaten by the group of friends.",
+      "dialogue": [
+        {
+          "character": "Triệu Cao",
+          "line": "Hừ, tiểu tử vô chi, bản quan là ngự sử đương triều, lời nói đều là mắt thấy tai nghe, cần gì phải thông đồng với ai?"
+        }
+      ],
+      "mood": "Chaotic"
+    },
+    {
+      "scene_id": "C001_S07",
+      "location": "Street",
+      "characters": [
+        "Tư An",
+        "Triệu Cao",
+        "Trương An Thế",
+        "Group of friends"
+      ],
+      "shot_type": "wide",
+      "action": "A patrol officer arrives; Tư An and his friends flee.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Huynh đệ, tuần phòng danh tới rồi."
+        }
+      ],
+      "mood": "Chaotic, Urgent"
+    },
+    {
+      "scene_id": "C001_S08",
+      "location": "Carriage ride",
+      "characters": [
+        "Tư An",
+        "Carriage Driver"
+      ],
+      "shot_type": "medium",
+      "action": "Tư An returns to his residence, gives a jade pendant to the driver.",
+      "dialogue": [],
+      "mood": "Calm"
+    },
+    {
+      "scene_id": "C001_S09",
+      "location": "Entrance of Định Quốc Công Residence",
+      "characters": [
+        "Tư An",
+        "Thanh Y"
+      ],
+      "shot_type": "medium",
+      "action": "Thanh Y greets Tư An at the gate.",
+      "dialogue": [
+        {
+          "character": "Thanh Y",
+          "line": "Có chứ, thiếp ra tận đây đón tiểu công gia mà biết điều đấy, gia không uổng công thương nàng."
+        }
+      ],
+      "mood": "Warm"
+    },
+    {
+      "scene_id": "C001_S10",
+      "location": "Inside Định Quốc Công Residence",
+      "characters": [
+        "Tư An",
+        "Từ Tiêu"
+      ],
+      "shot_type": "wide",
+      "action": "Tư An enters the courtyard and sees his father, Từ Tiêu, sharpening a sword.",
+      "dialogue": [],
+      "mood": "Tense"
+    },
+    {
+      "scene_id": "C001_S11",
+      "location": "Inside Định Quốc Công Residence",
+      "characters": [
+        "Tư An",
+        "Từ Tiêu"
+      ],
+      "shot_type": "close-up",
+      "action": "Tư An explains the situation to his father; Từ Tiêu becomes suspicious.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Thật ra cũng không phải chuyện lớn gì, chỉ là con đánh Triệu Cao một trận thôi mà."
+        },
+        {
+          "character": "Tư Tiêu",
+          "line": "Triệu Cao, con trai của cái thằng Triệu Tư kia hả? Tên tiểu tử đó giống cha nó, ẻo là quỷ quyện, đúng là cần phải dạy cho một bài học, chỉ cần con không đánh chết thì tên Triệu Tư đó cũng không dám làm gì đâu."
+        }
+      ],
+      "mood": "Suspicious, Serious"
+    },
+    {
+      "scene_id": "C001_S12",
+      "location": "Inside Định Quốc Công Residence",
+      "characters": [
+        "Tư An",
+        "Từ Tiêu"
+      ],
+      "shot_type": "medium",
+      "action": "Tư An reveals the full conspiracy involving Triệu Cao and Trương An Thế.",
+      "dialogue": [
+        {
+          "character": "Tư An",
+          "line": "Cha, nói trước chuyện này không phải lỗi con đâu nha. Chuyện là là bọn họ xúi con đến phủ công chúa, muốn con động phòng trước với công chúa."
+        }
+      ],
+      "mood": "Serious, Revealing"
+    }
+  ]
+}

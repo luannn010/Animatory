@@ -88,7 +88,7 @@ async def test_parse_chunk_fails_after_max_retries(tmp_path):
         instance.post = AsyncMock(return_value=_make_mock_response("not json"))
         MockClient.return_value = instance
 
-        with pytest.raises(ValueError, match="Failed to parse JSON"):
+        with pytest.raises(ValueError, match="could not parse JSON"):
             await parse_chunk("C001", "text", "ep1", tmp_path, max_retries=2)
 
 

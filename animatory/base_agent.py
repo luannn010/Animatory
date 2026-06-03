@@ -41,7 +41,7 @@ class BaseAgent:
     async def run(self, request: RunRequest) -> RunRecord:
         run_id = str(uuid.uuid4())
         self._run_id = run_id
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         record = RunRecord(
             run_id=run_id,
@@ -60,7 +60,7 @@ class BaseAgent:
         if missing:
             record.status = RunStatusEnum.failed
             record.error = f"Missing required inputs: {missing}"
-            record.finished_at = datetime.datetime.utcnow()
+            record.finished_at = datetime.datetime.now(datetime.timezone.utc)
             await self.store.update(run_id, status=RunStatusEnum.failed, error=record.error, finished_at=record.finished_at)
             raise ValueError(f"Agent '{self.definition.id}' missing required inputs: {missing}")
 
@@ -69,7 +69,7 @@ class BaseAgent:
             if not self._check_precondition(cond, request.context):
                 record.status = RunStatusEnum.failed
                 record.error = f"Precondition failed: {cond}"
-                record.finished_at = datetime.datetime.utcnow()
+                record.finished_at = datetime.datetime.now(datetime.timezone.utc)
                 await self.store.update(run_id, status=RunStatusEnum.failed, error=record.error, finished_at=record.finished_at)
                 return await self._handle_on_fail(record)
 
@@ -100,7 +100,7 @@ class BaseAgent:
                 if attempt < max_attempts:
                     continue
                 record.status = RunStatusEnum.failed
-                record.finished_at = datetime.datetime.utcnow()
+                record.finished_at = datetime.datetime.now(datetime.timezone.utc)
                 await self.store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=record.finished_at)
                 return await self._handle_on_fail(record)
             except Exception as exc:
@@ -110,7 +110,7 @@ class BaseAgent:
                 if attempt < max_attempts:
                     continue
                 record.status = RunStatusEnum.failed
-                record.finished_at = datetime.datetime.utcnow()
+                record.finished_at = datetime.datetime.now(datetime.timezone.utc)
                 await self.store.update(run_id, status=RunStatusEnum.failed, error=msg, finished_at=record.finished_at)
                 return await self._handle_on_fail(record)
 
@@ -119,7 +119,7 @@ class BaseAgent:
                 if attempt < max_attempts:
                     continue
                 record.status = RunStatusEnum.failed
-                record.finished_at = datetime.datetime.utcnow()
+                record.finished_at = datetime.datetime.now(datetime.timezone.utc)
                 await self.store.update(run_id, status=RunStatusEnum.failed, error=result.error, finished_at=record.finished_at)
                 return await self._handle_on_fail(record)
 
@@ -128,7 +128,7 @@ class BaseAgent:
             record.acceptance_passed = all_accepted
             break
 
-        finished_at = datetime.datetime.utcnow()
+        finished_at = datetime.datetime.now(datetime.timezone.utc)
         record.finished_at = finished_at
         record.duration_s = (finished_at - now).total_seconds()
 
@@ -175,7 +175,7 @@ class BaseAgent:
             record.status = RunStatusEnum.done
             if record.error:
                 record.logs.append(f"Skipped after error: {record.error}")
-            record.finished_at = record.finished_at or datetime.datetime.utcnow()
+            record.finished_at = record.finished_at or datetime.datetime.now(datetime.timezone.utc)
             await self.store.update(record.run_id, status=RunStatusEnum.done, logs=record.logs)
             return record
 

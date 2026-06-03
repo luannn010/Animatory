@@ -1,0 +1,163 @@
+<h2>Pipeline Tab — Flow Diagram Detail</h2>
+<p class="subtitle">Does this visual representation of the script→delivery pipeline look right to you?</p>
+
+<div class="mockup">
+  <div class="mockup-header">
+    /docs — Pipeline Reference tab
+  </div>
+  <div class="mockup-body" style="background:#0f2029;padding:24px;font-family:'Inter',sans-serif;">
+
+    <!-- Tab bar -->
+    <div style="display:flex;gap:0;border-bottom:1px solid #1e3a4a;margin-bottom:24px;">
+      <div style="padding:8px 20px;font-size:13px;font-weight:600;color:#4ecdc4;border-bottom:2px solid #4ecdc4;">Pipeline Reference</div>
+      <div style="padding:8px 20px;font-size:13px;color:#4a7a8a;">Agent Detail Cards</div>
+    </div>
+
+    <!-- Phase: Pre-production -->
+    <div style="margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4a7a8a;margin-bottom:10px;">Pre-production</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+
+        <!-- INPUT -->
+        <div style="background:#162030;border:1px solid #1e3a4a;border-radius:6px;padding:8px 12px;font-size:11px;color:#4ecdc4;white-space:nowrap;">
+          📄 final_script.txt
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;align-self:center;">→</div>
+
+        <!-- orch.showrunner -->
+        <div style="background:#1a3d4a;border:1px solid #2d6070;border-radius:6px;padding:8px 12px;min-width:140px;">
+          <div style="font-size:10px;font-weight:700;color:#4ecdc4;margin-bottom:2px;">orch.showrunner</div>
+          <div style="font-size:9px;color:#7ca9b5;">Producer / Script Breakdown</div>
+          <div style="margin-top:4px;font-size:9px;color:#4a7a8a;">→ breakdown.json</div>
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;align-self:center;">→</div>
+
+        <!-- Parallel tracks -->
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#a78bfa;">design.lineart</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · image</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#a78bfa;">design.color</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · image</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#f59e0b;">board.storyboard</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · text</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#34d399;">cast.dialogue</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · audio</span>
+          </div>
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;align-self:center;">→</div>
+
+        <!-- gate.checking -->
+        <div style="background:#1a2d3a;border:2px solid #2d6070;border-radius:6px;padding:8px 12px;min-width:120px;">
+          <div style="font-size:9px;font-weight:700;color:#f59e0b;margin-bottom:2px;">🔒 gate.checking</div>
+          <div style="font-size:9px;color:#7ca9b5;">Validate & Package</div>
+          <div style="margin-top:4px;font-size:9px;color:#4a7a8a;">→ vendor_package.zip</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div style="color:#4a7a8a;font-size:18px;margin:8px 0 8px 24px;">↓</div>
+
+    <!-- Phase: Production -->
+    <div style="margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4a7a8a;margin-bottom:10px;">Production</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+
+        <div style="background:#1a2d3a;border:1px solid #2d4a5a;border-radius:6px;padding:8px 12px;min-width:120px;">
+          <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:2px;">exec.rigging</div>
+          <div style="font-size:9px;color:#7ca9b5;">Rig Build · comfyui</div>
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;">→</div>
+
+        <div style="background:#1a2d3a;border:1px solid #2d4a5a;border-radius:6px;padding:8px 12px;min-width:120px;">
+          <div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:2px;">exec.animation</div>
+          <div style="font-size:9px;color:#7ca9b5;">Animation · comfyui</div>
+          <div style="margin-top:3px;display:flex;gap:4px;">
+            <span style="font-size:8px;background:#162030;color:#4a7a8a;padding:1px 4px;border-radius:3px;">block</span>
+            <span style="font-size:8px;background:#162030;color:#4a7a8a;padding:1px 4px;border-radius:3px;">inbetween</span>
+            <span style="font-size:8px;background:#162030;color:#4a7a8a;padding:1px 4px;border-radius:3px;">lipsync</span>
+          </div>
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;">→</div>
+
+        <div style="background:#1a2d3a;border:1px solid #2d6070;border-radius:6px;padding:8px 12px;min-width:120px;">
+          <div style="font-size:9px;font-weight:700;color:#f59e0b;margin-bottom:2px;">↻ orch.editor_retake</div>
+          <div style="font-size:9px;color:#7ca9b5;">Editor / Retakes (×7)</div>
+          <div style="margin-top:4px;font-size:9px;color:#4a7a8a;">→ first_cut.mp4</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div style="color:#4a7a8a;font-size:18px;margin:8px 0 8px 24px;">↓</div>
+
+    <!-- Phase: Post-production -->
+    <div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4a7a8a;margin-bottom:10px;">Post-production</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#34d399;">post.adr</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · audio</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#34d399;">post.composer</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · audio</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#34d399;">post.sfx</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · audio</span>
+          </div>
+          <div style="background:#162d3a;border:1px solid #1e3a4a;border-radius:5px;padding:6px 10px;">
+            <span style="font-size:9px;font-weight:700;color:#60a5fa;">exec.vfx</span>
+            <span style="font-size:9px;color:#4a7a8a;"> · comfyui</span>
+          </div>
+        </div>
+
+        <div style="color:#4a7a8a;font-size:16px;">→</div>
+
+        <div style="background:#1a3d4a;border:2px solid #4ecdc4;border-radius:8px;padding:10px 14px;min-width:130px;">
+          <div style="font-size:10px;font-weight:700;color:#4ecdc4;margin-bottom:2px;">exec.mix_deliver</div>
+          <div style="font-size:9px;color:#7ca9b5;">Picture Lock / Deliver · utility</div>
+          <div style="margin-top:4px;font-size:9px;color:#4ecdc4;">→ 🎬 episode_master.mov</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #1e3a4a;display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="font-size:9px;color:#4a7a8a;display:flex;align-items:center;gap:4px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#a78bfa;display:inline-block;"></span> Image
+      </div>
+      <div style="font-size:9px;color:#4a7a8a;display:flex;align-items:center;gap:4px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#f59e0b;display:inline-block;"></span> Text/LLM
+      </div>
+      <div style="font-size:9px;color:#4a7a8a;display:flex;align-items:center;gap:4px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#34d399;display:inline-block;"></span> Audio
+      </div>
+      <div style="font-size:9px;color:#4a7a8a;display:flex;align-items:center;gap:4px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#60a5fa;display:inline-block;"></span> ComfyUI
+      </div>
+      <div style="font-size:9px;color:#4a7a8a;display:flex;align-items:center;gap:4px;">
+        <span style="width:8px;height:8px;border-radius:2px;background:#4ecdc4;display:inline-block;"></span> Orchestration / Gate
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does this pipeline diagram feel right? Does the flow and color coding make sense, or would you like anything changed before I show the Agent Cards tab mockup?</p>

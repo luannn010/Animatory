@@ -77,3 +77,120 @@ async def test_list_episodes(client: AsyncClient, tmp_path, monkeypatch):
     episodes = r.json()
     ids = [e["episode_id"] for e in episodes]
     assert "ep2" in ids
+
+
+@pytest.mark.asyncio
+async def test_list_episode_chunks(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep3.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep3", files=files)
+
+    r = await client.get("/pipeline/episodes/ep3/chunks")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["episode_id"] == "ep3"
+    assert data["chunk_count"] >= 1
+    assert data["parsed_count"] == 0
+    assert data["status"] == "chunked"
+    assert len(data["chunks"]) == data["chunk_count"]
+    first = data["chunks"][0]
+    assert first["parsed"] is False
+    assert "chunk_id" in first and "file" in first
+
+
+@pytest.mark.asyncio
+async def test_list_episode_chunks_404(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    r = await client.get("/pipeline/episodes/nonexistent_ep/chunks")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_scenes_returns_parsed_scenes(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep4.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep4", files=files)
+
+    chunks = (await client.get("/pipeline/episodes/ep4/chunks")).json()["chunks"]
+    chunk_id = chunks[0]["chunk_id"]
+
+    # Simulate a completed parse by writing the scenes file the parser would emit.
+    scenes_doc = {
+        "chunk_id": chunk_id,
+        "source_file": "ep4.txt",
+        "model": "qwen3.5",
+        "parsed_at": "2026-06-02T10:00:00Z",
+        "scenes": [
+            {
+                "scene_id": f"{chunk_id}_S01",
+                "location": "Phòng công chúa",
+                "characters": ["Tú An", "Tiểu Lan Nhi"],
+                "shot_type": "medium",
+                "action": "Tú An bị trói trên giường.",
+                "dialogue": [{"character": "Tú An", "line": "Mẹ kiếp, nhận nhầm rồi..."}],
+                "mood": "căng thẳng",
+            }
+        ],
+    }
+    (tmp_path / "ep4" / f"{chunk_id}_scenes.json").write_text(
+        json.dumps(scenes_doc, ensure_ascii=False), encoding="utf-8"
+    )
+
+    r = await client.get(f"/pipeline/episodes/ep4/chunks/{chunk_id}/scenes")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["chunk_id"] == chunk_id
+    assert len(data["scenes"]) == 1
+    scene = data["scenes"][0]
+    assert scene["shot_type"] == "medium"
+    assert scene["characters"] == ["Tú An", "Tiểu Lan Nhi"]
+    assert scene["dialogue"][0]["character"] == "Tú An"
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_scenes_409_when_not_parsed(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep5.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep5", files=files)
+    chunk_id = (await client.get("/pipeline/episodes/ep5/chunks")).json()["chunks"][0]["chunk_id"]
+
+    r = await client.get(f"/pipeline/episodes/ep5/chunks/{chunk_id}/scenes")
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_scenes_404_unknown_chunk(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep6.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep6", files=files)
+
+    r = await client.get("/pipeline/episodes/ep6/chunks/C999/scenes")
+    assert r.status_code == 404
+
+    r2 = await client.get("/pipeline/episodes/nope/chunks/C001/scenes")
+    assert r2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_text(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep7.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep7", files=files)
+
+    chunk_id = (await client.get("/pipeline/episodes/ep7/chunks")).json()["chunks"][0]["chunk_id"]
+    r = await client.get(f"/pipeline/episodes/ep7/chunks/{chunk_id}/text")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["chunk_id"] == chunk_id
+    assert data["word_count"] >= 1
+    assert "Sentence one." in data["text"]
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_text_404(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("ep8.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post("/pipeline/chunk?episode_id=ep8", files=files)
+
+    assert (await client.get("/pipeline/episodes/ep8/chunks/C999/text")).status_code == 404
+    assert (await client.get("/pipeline/episodes/nope/chunks/C001/text")).status_code == 404

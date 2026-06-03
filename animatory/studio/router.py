@@ -41,7 +41,7 @@ async def list_projects(request: Request):
 
 @router.post("/projects", response_model=Project)
 async def create_project(request: Request, body: CreateProjectRequest):
-    return _store(request).create_project(body.title)
+    return await _store(request).create_project(body.title)
 
 
 @router.get("/projects/{project_id}", response_model=Project)
@@ -53,14 +53,14 @@ async def get_project(request: Request, project_id: str):
 async def rename_project(request: Request, project_id: str, body: RenameProjectRequest):
     store = _store(request)
     _project_or_404(store, project_id)
-    return store.update_title(project_id, body.title)
+    return await store.update_title(project_id, body.title)
 
 
 @router.post("/projects/{project_id}/advance", response_model=Project)
 async def advance_phase(request: Request, project_id: str, body: AdvancePhaseRequest):
     store = _store(request)
     _project_or_404(store, project_id)
-    return store.advance_phase(project_id, body.to)
+    return await store.advance_phase(project_id, body.to)
 
 
 # ── child resources ───────────────────────────────────────────────────────────

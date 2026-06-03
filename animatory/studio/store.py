@@ -1,13 +1,20 @@
-"""In-memory studio store + background parse-job lifecycle.
+"""SQLite-backed studio store + background parse-job lifecycle.
 
-Mirrors the frontend ``studioApi``. State lives in process memory and resets
-when the store is re-created (one instance per app lifespan). Parse runs as a
-background asyncio task that streams progress, mirroring the agent run model.
+Projects and their scenes persist to SQLite (the shared ``animatory.db``, like
+``RunStore``) so they survive restarts. Reads are served from an in-memory cache
+that is hydrated from the DB on :meth:`init`; mutations update the cache and
+write through to the DB. Parse jobs are ephemeral and remain in memory only.
+
+On first run (empty DB) the cache/DB are populated from the seed fixtures, so a
+fresh install still shows the demo projects.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
+
+import aiosqlite
 
 from animatory.studio import providers
 from animatory.studio.models import (
@@ -28,12 +35,102 @@ class JobNotFound(KeyError):
     pass
 
 
+_CREATE_PROJECTS_SQL = """
+CREATE TABLE IF NOT EXISTS studio_projects (
+    id   TEXT PRIMARY KEY,
+    ord  INTEGER,
+    data TEXT
+)
+"""
+
+_CREATE_SCENES_SQL = """
+CREATE TABLE IF NOT EXISTS studio_scenes (
+    project_id TEXT PRIMARY KEY,
+    data       TEXT
+)
+"""
+
+
 class StudioStore:
-    def __init__(self) -> None:
-        self._projects: list[Project] = seed_projects()
-        self._scenes: dict[str, list[Scene]] = {p.id: seed_scenes(p.id) for p in self._projects}
+    def __init__(self, db_path: str = "animatory.db") -> None:
+        self._db_path = db_path
+        self._db: aiosqlite.Connection | None = None
+        self._projects: list[Project] = []
+        self._scenes: dict[str, list[Scene]] = {}
         self._new_counter = 0
         self._jobs: dict[str, ParseJob] = {}
+
+    # ── persistence ─────────────────────────────────────────────────────────────
+
+    async def init(self) -> None:
+        self._db = await aiosqlite.connect(self._db_path)
+        await self._db.execute("PRAGMA busy_timeout=5000")
+        await self._db.execute(_CREATE_PROJECTS_SQL)
+        await self._db.execute(_CREATE_SCENES_SQL)
+        await self._db.commit()
+
+        async with self._db.execute("SELECT COUNT(*) FROM studio_projects") as cur:
+            (count,) = await cur.fetchone()
+
+        if count == 0:
+            # First run: persist the seed fixtures so the DB is the source of truth.
+            for i, p in enumerate(seed_projects()):
+                await self._write_project(p, ord=i)
+                await self._write_scenes(p.id, seed_scenes(p.id))
+            await self._db.commit()
+
+        await self._hydrate()
+
+    async def close(self) -> None:
+        if self._db is not None:
+            await self._db.close()
+            self._db = None
+
+    async def _hydrate(self) -> None:
+        """Load the persisted projects/scenes into the in-memory read cache."""
+        assert self._db, "call init() first"
+        self._projects = []
+        self._scenes = {}
+
+        async with self._db.execute("SELECT data FROM studio_projects ORDER BY ord ASC") as cur:
+            for (data,) in await cur.fetchall():
+                self._projects.append(Project.model_validate(json.loads(data)))
+
+        async with self._db.execute("SELECT project_id, data FROM studio_scenes") as cur:
+            for pid, data in await cur.fetchall():
+                self._scenes[pid] = [Scene.model_validate(s) for s in json.loads(data)]
+        for p in self._projects:
+            self._scenes.setdefault(p.id, [])
+
+        # Restore the create counter so new ids (new{N}) don't collide with saved ones.
+        max_n = 0
+        for p in self._projects:
+            if p.id.startswith("new"):
+                try:
+                    max_n = max(max_n, int(p.id[3:]))
+                except ValueError:
+                    pass
+        self._new_counter = max_n
+
+    async def _write_project(self, project: Project, ord: int | None = None) -> None:
+        assert self._db, "call init() first"
+        if ord is None:
+            async with self._db.execute("SELECT ord FROM studio_projects WHERE id = ?", (project.id,)) as cur:
+                row = await cur.fetchone()
+            ord = row[0] if row else 0
+        await self._db.execute(
+            "INSERT INTO studio_projects (id, ord, data) VALUES (?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET ord=excluded.ord, data=excluded.data",
+            (project.id, ord, json.dumps(project.model_dump(mode="json"))),
+        )
+
+    async def _write_scenes(self, project_id: str, scenes: list[Scene]) -> None:
+        assert self._db, "call init() first"
+        await self._db.execute(
+            "INSERT INTO studio_scenes (project_id, data) VALUES (?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET data=excluded.data",
+            (project_id, json.dumps([s.model_dump(mode="json") for s in scenes])),
+        )
 
     # ── projects ──────────────────────────────────────────────────────────────
 
@@ -49,7 +146,7 @@ class StudioStore:
     def get_project(self, project_id: str) -> Project:
         return self._find(project_id)
 
-    def create_project(self, title: str | None = None) -> Project:
+    async def create_project(self, title: str | None = None) -> Project:
         self._new_counter += 1
         pid = f"new{self._new_counter}"
         project = Project(
@@ -63,14 +160,20 @@ class StudioStore:
         )
         self._projects.insert(0, project)
         self._scenes[pid] = []
+        # Negative ord keeps created projects ahead of seeds, newest first.
+        await self._write_project(project, ord=-self._new_counter)
+        await self._write_scenes(pid, [])
+        await self._db.commit()
         return project
 
-    def update_title(self, project_id: str, title: str) -> Project:
+    async def update_title(self, project_id: str, title: str) -> Project:
         p = self._find(project_id)
         p.title = title
+        await self._write_project(p)
+        await self._db.commit()
         return p
 
-    def advance_phase(self, project_id: str, to: Phase) -> Project:
+    async def advance_phase(self, project_id: str, to: Phase) -> Project:
         p = self._find(project_id)
         target = PHASE_ORDER.index(to)
         for i, ph in enumerate(PHASE_ORDER):
@@ -80,6 +183,8 @@ class StudioStore:
                 else PhaseStatus.locked
             )
         p.current_phase = to
+        await self._write_project(p)
+        await self._db.commit()
         return p
 
     # ── child resources ─────────────────────────────────────────────────────────
@@ -135,6 +240,11 @@ class StudioStore:
             self._scenes[job.project_id] = scenes
             project = self._find(job.project_id)
             project.scene_count = len(scenes)
+
+            # Persist the parsed scenes + updated scene_count.
+            await self._write_scenes(job.project_id, scenes)
+            await self._write_project(project)
+            await self._db.commit()
 
             job.scenes = scenes
             job.progress = 1.0

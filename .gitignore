@@ -2,3 +2,12 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Local environment config (keep .env.example tracked)
+.env
+
+# Runtime SQLite DB (regenerated at startup)
+animatory.db
+
+# Temp test/output logs
+*_out.txt
