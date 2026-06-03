@@ -4,11 +4,20 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import AsyncIterator
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```\s*$", re.DOTALL)
+_FALLBACK_NOTE = (
+    "\n\nIMPORTANT: tools are unavailable. To request changes, end your reply with a "
+    "single fenced code block: ```json {\"scene_edits\": [{\"scene_id\": \"...\", "
+    "\"changes\": {...}}], \"text_corrections\": [{\"find\": \"...\", \"replace\": "
+    "\"...\"}]} ``` — omit the block entirely if no change is requested."
+)
 
 _SYSTEM = """\
 You are a Vietnamese novel-to-animation production assistant helping refine ONE
@@ -51,7 +60,8 @@ _KIND_BY_TOOL = {
 }
 
 
-def _build_messages(scene_index, mentioned_scenes, raw_text, messages) -> list[dict]:
+def _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools) -> list[dict]:
+    system = _SYSTEM if use_tools else _SYSTEM + _FALLBACK_NOTE
     lines = ["Scenes in this chapter (id · location · characters):"]
     for s in scene_index:
         chars = ", ".join(s.get("characters", []))
@@ -62,7 +72,7 @@ def _build_messages(scene_index, mentioned_scenes, raw_text, messages) -> list[d
     if raw_text:
         ctx += f"\n\nRaw chapter text:\n---\n{raw_text}\n---"
     return (
-        [{"role": "system", "content": _SYSTEM}, {"role": "system", "content": ctx}]
+        [{"role": "system", "content": system}, {"role": "system", "content": ctx}]
         + [{"role": m["role"], "content": m["content"]} for m in messages]
     )
 
@@ -87,7 +97,7 @@ async def stream_chat(
 
     payload = {
         "model": model_name,
-        "messages": _build_messages(scene_index, mentioned_scenes, raw_text, messages),
+        "messages": _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools),
         "stream": True,
         "temperature": 0.3,
         "stream_options": {"include_usage": True},
@@ -130,7 +140,8 @@ async def stream_chat(
                             yield {"event": "thinking", "data": {"delta": delta["reasoning_content"]}}
                         if delta.get("content"):
                             content_buf += delta["content"]
-                            yield {"event": "reply", "data": {"delta": delta["content"]}}
+                            if use_tools:
+                                yield {"event": "reply", "data": {"delta": delta["content"]}}
                         for tc in delta.get("tool_calls") or []:
                             idx = tc.get("index", 0)
                             frag = tool_frags.setdefault(idx, {"name": "", "args": ""})
@@ -139,18 +150,44 @@ async def stream_chat(
                                 frag["name"] = fn["name"]
                             if fn.get("arguments"):
                                 frag["args"] += fn["arguments"]
-        for idx in sorted(tool_frags):
-            frag = tool_frags[idx]
-            kind = _KIND_BY_TOOL.get(frag["name"])
-            if not kind:
-                continue
-            try:
-                args = json.loads(frag["args"])
-            except json.JSONDecodeError:
-                logger.warning("[chat] dropping unparsable tool call %s", frag["name"])
-                continue
-            yield {"event": "tool", "data": {"kind": kind, "payload": args}}
+        if use_tools:
+            for idx in sorted(tool_frags):
+                frag = tool_frags[idx]
+                kind = _KIND_BY_TOOL.get(frag["name"])
+                if not kind:
+                    continue
+                try:
+                    args = json.loads(frag["args"])
+                except json.JSONDecodeError:
+                    logger.warning("[chat] dropping unparsable tool call %s", frag["name"])
+                    continue
+                yield {"event": "tool", "data": {"kind": kind, "payload": args}}
+        else:
+            visible, edits = _split_fallback(content_buf)
+            if visible:
+                yield {"event": "reply", "data": {"delta": visible}}
+            for kind, payload in edits:
+                yield {"event": "tool", "data": {"kind": kind, "payload": payload}}
         yield {"event": "done", "data": {}}
     except httpx.HTTPError as exc:
         logger.warning("[chat] stream error -> %s", repr(exc))
         yield {"event": "error", "data": {"detail": f"could not reach Qwen at {endpoint}: {exc}"}}
+
+
+def _split_fallback(content: str) -> tuple[str, list[tuple[str, dict]]]:
+    """Split a fallback reply into (visible_prose, [(kind, payload), ...])."""
+    m = _FENCE_RE.search(content)
+    if not m:
+        return content, []
+    visible = content[: m.start()].rstrip()
+    try:
+        block = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return content, []  # leave it visible rather than lose it
+    edits: list[tuple[str, dict]] = []
+    for se in block.get("scene_edits", []):
+        edits.append(("scene_edits", se))
+    tc = block.get("text_corrections", [])
+    if tc:
+        edits.append(("text_corrections", {"corrections": tc}))
+    return visible, edits

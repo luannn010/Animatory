@@ -106,3 +106,24 @@ async def test_stream_chat_emits_error_on_http_failure():
         ))
     assert events[-1]["event"] == "error"
     assert "could not reach" in events[-1]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_fallback_parses_trailing_json(monkeypatch):
+    monkeypatch.setenv("QWEN_TOOLS", "0")
+    body = ('Sure, darkening it.\n```json\n'
+            '{"scene_edits": [{"scene_id": "C001_S01", "changes": {"mood": "dark"}}],'
+            ' "text_corrections": []}\n```')
+    chunks = [{"choices": [{"delta": {"content": body}}]}]
+    with _mock_stream(_sse_lines(chunks)):
+        events = await _collect(stream_chat(
+            chunk_id="C001", scene_index=[], mentioned_scenes=[], raw_text=None,
+            messages=[{"role": "user", "content": "make S1 darker"}], thinking=False,
+        ))
+    reply_text = "".join(e["data"]["delta"] for e in events if e["event"] == "reply")
+    assert "```json" not in reply_text
+    tools = [e for e in events if e["event"] == "tool"]
+    assert len(tools) == 1
+    assert tools[0]["data"]["kind"] == "scene_edits"
+    assert tools[0]["data"]["payload"]["scene_id"] == "C001_S01"
+    assert events[-1]["event"] == "done"
