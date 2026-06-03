@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode
+from animatory.scene_refiner import proofread_text, refine_scenes
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,16 @@ class SceneModel(BaseModel):
 
 class SaveScenesRequest(BaseModel):
     scenes: list[SceneModel]
+
+
+class ChatMessageModel(BaseModel):
+    role: str
+    content: str
+
+
+class RefineRequest(BaseModel):
+    messages: list[ChatMessageModel]
+    target: str  # "text" | "scenes"
 
 
 @router.post("/parse/{episode_id}")
@@ -368,3 +379,21 @@ async def reset_chunk_text(episode_id: str, chunk_id: str):
     if edited.exists():
         edited.unlink()
     return _text_payload(ep_dir, chunk_id, meta)
+
+
+@router.post("/episodes/{episode_id}/chunks/{chunk_id}/refine")
+async def refine_chunk(episode_id: str, chunk_id: str, body: RefineRequest):
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)
+    text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    messages = [m.model_dump() for m in body.messages]
+    try:
+        if body.target == "scenes":
+            doc = _scenes_payload(ep_dir, chunk_id)
+            if doc is None:
+                # Spec: refine on scenes requires a parsed chunk -> 404 (not 409).
+                raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+            return await refine_scenes(chunk_id, text, doc.get("scenes", []), messages)
+        return await proofread_text(chunk_id, text, messages)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

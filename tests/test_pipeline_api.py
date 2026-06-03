@@ -3,6 +3,7 @@ from __future__ import annotations
 import io, json
 import pytest
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
 
 TINY_TXT = b"Sentence one. Sentence two. " * 30  # ~180 words
 
@@ -319,3 +320,46 @@ async def test_chunks_listing_reflects_edited_scene_count(client: AsyncClient, t
     chunks = (await client.get("/pipeline/episodes/se5/chunks")).json()["chunks"]
     row = next(c for c in chunks if c["chunk_id"] == cid)
     assert row["scene_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_refine_text_target(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "rf1")
+    fake = {"reply": "ok", "corrections": [{"find": "a", "replace": "b",
+            "rationale": "r", "all_occurrences": True}]}
+    with patch("animatory.pipeline_router.proofread_text", new_callable=AsyncMock, return_value=fake):
+        r = await client.post(f"/pipeline/episodes/rf1/chunks/{cid}/refine",
+                              json={"messages": [{"role": "user", "content": "fix"}], "target": "text"})
+    assert r.status_code == 200
+    assert r.json()["corrections"][0]["replace"] == "b"
+
+
+@pytest.mark.asyncio
+async def test_refine_scenes_target(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "rf2")
+    await _parse_one(client, tmp_path, cid, "rf2")
+    fake = {"reply": "ok", "proposals": [{"scene_id": f"{cid}_S01",
+            "changes": {"mood": "dark"}, "rationale": "r"}]}
+    with patch("animatory.pipeline_router.refine_scenes", new_callable=AsyncMock, return_value=fake):
+        r = await client.post(f"/pipeline/episodes/rf2/chunks/{cid}/refine",
+                              json={"messages": [{"role": "user", "content": "darker"}], "target": "scenes"})
+    assert r.status_code == 200
+    assert r.json()["proposals"][0]["changes"]["mood"] == "dark"
+
+
+@pytest.mark.asyncio
+async def test_refine_scenes_target_unparsed_404(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "rf3")
+    r = await client.post(f"/pipeline/episodes/rf3/chunks/{cid}/refine",
+                          json={"messages": [{"role": "user", "content": "x"}], "target": "scenes"})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_refine_llm_failure_502(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "rf4")
+    with patch("animatory.pipeline_router.proofread_text", new_callable=AsyncMock,
+               side_effect=ValueError("could not reach Qwen")):
+        r = await client.post(f"/pipeline/episodes/rf4/chunks/{cid}/refine",
+                              json={"messages": [{"role": "user", "content": "x"}], "target": "text"})
+    assert r.status_code == 502
