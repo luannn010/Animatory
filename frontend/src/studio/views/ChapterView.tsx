@@ -43,6 +43,7 @@ export function ChapterView() {
   const [chatError, setChatError] = useState('')
   const chatAbortRef = useRef<{ abort(): void } | null>(null)
   const lastTurnRef = useRef<{ text: string; mentions: ChatMention } | null>(null)
+  const streamReplyRef = useRef('')
 
   // Page state
   const [loading, setLoading] = useState(true)
@@ -171,6 +172,7 @@ export function ChapterView() {
     lastTurnRef.current = { text, mentions }
     const next = [...history, { role: 'user' as const, content: text }]
     setMessages(next)
+    streamReplyRef.current = ''
     setStreaming(true); setChatError(''); setStreamReply(''); setStreamThinking(''); setSkipped(0)
     let reply = ''
     const handle = streamChat(
@@ -178,7 +180,7 @@ export function ChapterView() {
       { messages: next, thinking: thinkingEnabled, mentions },
       {
         onThinking: d => setStreamThinking(t => t + d),
-        onReply: d => { reply += d; setStreamReply(reply) },
+        onReply: d => { reply += d; streamReplyRef.current = reply; setStreamReply(reply) },
         onTool: (kind, payload) => {
           if (kind === 'scene_edits') {
             const p = payload as ScenePatch
@@ -208,8 +210,10 @@ export function ChapterView() {
   }
   function onAbortChat() {
     chatAbortRef.current?.abort()
+    const partial = streamReplyRef.current
+    streamReplyRef.current = ''
     setStreaming(false)
-    setMessages(m => streamReply ? [...m, { role: 'assistant', content: streamReply }] : m)
+    setMessages(m => partial ? [...m, { role: 'assistant', content: partial }] : m)
     setStreamReply(''); setStreamThinking('')
   }
   function onRetryChat() {
