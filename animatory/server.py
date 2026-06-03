@@ -22,6 +22,7 @@ from animatory.models import (
 )
 from animatory.registry import load_registry, AgentRegistry
 from animatory.run_store import RunStore, InMemoryRunStore
+from animatory.chat_store import ChatStore, InMemoryChatStore
 from animatory.base_agent import BaseAgent
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor
@@ -73,10 +74,14 @@ async def lifespan(app: FastAPI):
     studio_store = StudioStore(db_path=db_path)
     await studio_store.init()
 
+    chat_store = InMemoryChatStore() if db_path == ":memory:" else ChatStore(db_path)
+    await chat_store.init()
+
     app.state.registry = registry
     app.state.store = store
     app.state.executor_map = executor_map
     app.state.studio_store = studio_store
+    app.state.chat_store = chat_store
 
     yield
 

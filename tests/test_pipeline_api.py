@@ -372,3 +372,11 @@ async def test_chat_stream_drops_foreign_scene_mentions(client: AsyncClient, tmp
         )
     ids = [s["scene_id"] for s in captured["mentioned"]]
     assert ids == [f"{cid}_S01"]
+
+
+@pytest.mark.asyncio
+async def test_chat_store_wired_into_app(client: AsyncClient):
+    # The app exposes a chat_store on state after lifespan startup.
+    from animatory.server import app
+    assert hasattr(app.state, "chat_store")
+    assert app.state.chat_store is not None
