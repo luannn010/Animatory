@@ -13,11 +13,6 @@ def _make_mock_response(content: str, status: int = 200):
     return mock_resp
 
 
-def _patch_client(content):
-    """Return a context manager patching httpx.AsyncClient to return `content`."""
-    p = patch("animatory.scene_refiner.httpx.AsyncClient")
-    return p
-
 
 @pytest.mark.asyncio
 async def test_proofread_text_returns_reply_and_corrections():

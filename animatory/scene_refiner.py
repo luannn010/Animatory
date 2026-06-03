@@ -37,7 +37,8 @@ def _strip(raw: str) -> str:
 
 
 async def _chat_json(system: str, user_content: str, messages: list[dict],
-                     qwen_endpoint, model, max_retries) -> dict:
+                     qwen_endpoint: str | None, model: str | None,
+                     max_retries: int | None) -> dict:
     endpoint = (qwen_endpoint or os.environ.get("QWEN_ENDPOINT", "http://localhost:1090")).rstrip("/")
     model_name = model or os.environ.get("QWEN_MODEL", "qwen3.5")
     retries = max_retries if max_retries is not None else int(os.environ.get("QWEN_MAX_RETRIES", "3"))
@@ -46,7 +47,7 @@ async def _chat_json(system: str, user_content: str, messages: list[dict],
 
     chat = (
         [{"role": "system", "content": system}]
-        + [{"role": "system", "content": user_content}]
+        + [{"role": "user", "content": user_content}]
         + [{"role": m["role"], "content": m["content"]} for m in messages]
     )
     payload = {
@@ -56,6 +57,10 @@ async def _chat_json(system: str, user_content: str, messages: list[dict],
         "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
 
+    logger.info(
+        "[refiner] endpoint=%s model=%s msgs=%d retries=%d timeout=%.0fs thinking=%s",
+        endpoint, model_name, len(messages), retries, timeout_s, enable_thinking,
+    )
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
         if attempt > 1:
