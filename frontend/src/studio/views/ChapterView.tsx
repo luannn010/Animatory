@@ -261,10 +261,10 @@ export function ChapterView() {
               {parsed && (
                 <div className="flex items-center gap-2.5">
                   {scenesEdited && (
-                    <button onClick={onResetScenes} className="text-xs text-steel hover:text-ink transition-colors">Reset</button>
+                    <button onClick={onResetScenes} className="text-xs text-steel hover:text-ink transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]">Reset</button>
                   )}
                   <button onClick={onSaveScenes} disabled={!scenesDirty || savingScenes}
-                    className="px-3 py-1.5 rounded-md bg-[#3772cf] text-white text-xs font-medium hover:bg-[#2c5cab] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    className="px-3 py-1.5 rounded-md bg-[#3772cf] text-white text-xs font-medium hover:bg-[#2c5cab] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]">
                     {savingScenes ? 'Saving…' : scenesDirty ? 'Save changes ●' : 'Saved'}
                   </button>
                 </div>

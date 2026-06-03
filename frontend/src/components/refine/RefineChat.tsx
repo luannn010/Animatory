@@ -67,7 +67,7 @@ export function RefineChat(props: Props) {
             Thinking {thinkingEnabled ? 'on' : 'off'}
           </button>
           <button type="button" onClick={onNewChat} disabled={streaming}
-            className="text-[11px] text-steel hover:text-ink disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] rounded">
+            className="text-[11px] text-steel hover:text-ink disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] rounded-md">
             New chat
           </button>
         </div>
