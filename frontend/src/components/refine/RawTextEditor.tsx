@@ -34,7 +34,7 @@ export function RawTextEditor(props: Props) {
     <section className="mb-7">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-ink">
-          Raw text{edited && <span className="ml-2 text-[11px] font-normal text-[#3772cf]">&#9998; edited</span>}
+          Raw text{edited && <span className="ml-2 text-[11px] font-normal text-[#3772cf]">edited</span>}
         </h2>
         <button
           onClick={() => setEditing(e => !e)}

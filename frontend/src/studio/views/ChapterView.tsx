@@ -207,7 +207,7 @@ export function ChapterView() {
       <p className="text-sm text-steel mt-1 mb-6">
         {textWordCount != null ? `${textWordCount.toLocaleString()} words` : 'Source text'}
         {parsed ? ` · ${scenes.length} scenes` : ''}
-        {(textEdited || scenesEdited) ? ' · ✎ edited' : ''}
+        {(textEdited || scenesEdited) ? ' · edited' : ''}
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 items-start">
@@ -238,7 +238,18 @@ export function ChapterView() {
             </div>
 
             {loading ? (
-              <p className="text-xs text-steel py-4">Loading…</p>
+              <div className="space-y-2.5" aria-hidden="true">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-canvas border border-hairline rounded-md p-4 space-y-2.5 animate-pulse">
+                    <div className="h-2.5 w-14 rounded-xs bg-hairline" />
+                    <div className="h-3.5 w-3/4 rounded-xs bg-hairline" />
+                    <div className="flex gap-1.5">
+                      <div className="h-4 w-20 rounded-xs bg-hairline" />
+                      <div className="h-4 w-16 rounded-xs bg-hairline" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : !parsed ? (
               <div className="rounded-lg border border-dashed border-hairline bg-canvas p-6 text-center text-sm text-steel">
                 This chapter hasn't been parsed yet.
