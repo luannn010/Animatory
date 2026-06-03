@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode
-from animatory.scene_refiner import proofread_text, refine_scenes
+from animatory.chat_engine import stream_chat
+from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
 
@@ -155,14 +156,20 @@ class SaveScenesRequest(BaseModel):
     scenes: list[SceneModel]
 
 
-class ChatMessageModel(BaseModel):
+class ChatTurnMessage(BaseModel):
     role: str
     content: str
 
 
-class RefineRequest(BaseModel):
-    messages: list[ChatMessageModel]
-    target: str  # "text" | "scenes"
+class ChatMentions(BaseModel):
+    scenes: list[str] = []
+    raw: bool = False
+
+
+class ChatStreamRequest(BaseModel):
+    messages: list[ChatTurnMessage]
+    thinking: bool = False
+    mentions: ChatMentions = ChatMentions()
 
 
 @router.post("/parse/{episode_id}")
@@ -381,19 +388,33 @@ async def reset_chunk_text(episode_id: str, chunk_id: str):
     return _text_payload(ep_dir, chunk_id, meta)
 
 
-@router.post("/episodes/{episode_id}/chunks/{chunk_id}/refine")
-async def refine_chunk(episode_id: str, chunk_id: str, body: RefineRequest):
+@router.post("/episodes/{episode_id}/chunks/{chunk_id}/chat/stream")
+async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest):
     ep_dir = _processed_dir() / episode_id
     meta = _chunk_meta(ep_dir, chunk_id)
-    text = _text_payload(ep_dir, chunk_id, meta)["text"]
+
+    doc = _scenes_payload(ep_dir, chunk_id)
+    all_scenes = doc.get("scenes", []) if doc else []
+    valid_ids = {s["scene_id"] for s in all_scenes}
+    scene_index = [
+        {"scene_id": s["scene_id"], "location": s.get("location", ""),
+         "characters": s.get("characters", [])}
+        for s in all_scenes
+    ]
+    wanted = set(body.mentions.scenes) & valid_ids
+    mentioned = [s for s in all_scenes if s["scene_id"] in wanted]
+    raw_text = _text_payload(ep_dir, chunk_id, meta)["text"] if body.mentions.raw else None
     messages = [m.model_dump() for m in body.messages]
-    try:
-        if body.target == "scenes":
-            doc = _scenes_payload(ep_dir, chunk_id)
-            if doc is None:
-                # Spec: refine on scenes requires a parsed chunk -> 404 (not 409).
-                raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
-            return await refine_scenes(chunk_id, text, doc.get("scenes", []), messages)
-        return await proofread_text(chunk_id, text, messages)
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    async def gen():
+        async for ev in stream_chat(
+            chunk_id=chunk_id,
+            scene_index=scene_index,
+            mentioned_scenes=mentioned,
+            raw_text=raw_text,
+            messages=messages,
+            thinking=body.thinking,
+        ):
+            yield {"event": ev["event"], "data": json.dumps(ev["data"], ensure_ascii=False)}
+
+    return EventSourceResponse(gen())
