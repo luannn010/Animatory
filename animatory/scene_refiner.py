@@ -93,3 +93,33 @@ async def proofread_text(chunk_id, chunk_text, messages, *,
     out = await _chat_json(_TEXT_SYSTEM, user_content, messages,
                            qwen_endpoint, model, max_retries)
     return {"reply": out.get("reply", ""), "corrections": out.get("corrections", [])}
+
+
+_SCENES_SYSTEM = """\
+You are a Vietnamese novel-to-animation production assistant refining an existing
+shot list. Reply to the user, then propose edits to EXISTING scenes only (do not
+add or remove scenes). Return ONLY valid JSON matching this schema - no markdown:
+
+{
+  "reply": "short answer to the user",
+  "proposals": [
+    {"scene_id": "<existing scene_id>",
+     "changes": {"location": "...", "characters": ["..."], "shot_type": "...",
+                 "action": "...", "mood": "...",
+                 "dialogue": [{"character": "...", "line": "..."}]},
+     "rationale": "why"}
+  ]
+}
+Include in "changes" ONLY the fields you want to alter."""
+
+
+async def refine_scenes(chunk_id, chunk_text, scenes, messages, *,
+                        qwen_endpoint=None, model=None, max_retries=None) -> dict:
+    """Return {"reply": str, "proposals": [ ... ]} from the scene-refine chat."""
+    user_content = (
+        f"Chapter {chunk_id} text:\n---\n{chunk_text}\n---\n\n"
+        f"Current scenes JSON:\n{json.dumps(scenes, ensure_ascii=False)}"
+    )
+    out = await _chat_json(_SCENES_SYSTEM, user_content, messages,
+                           qwen_endpoint, model, max_retries)
+    return {"reply": out.get("reply", ""), "proposals": out.get("proposals", [])}
