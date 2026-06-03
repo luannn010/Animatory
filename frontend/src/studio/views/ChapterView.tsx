@@ -2,10 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  getChunkScenes, getChunkText, parseEpisode, refineChat,
+  getChunkScenes, getChunkText, parseEpisode,
   saveScenes, saveText, resetScenes, resetText,
   type ChatMessage, type PipelineScene, type ScenePatch, type TextCorrection,
 } from '../../api/pipeline'
+import { streamChat, type ChatMention, type ChatUsage } from '../../api/chat'
 import { api } from '../../api'
 import { applyCorrection } from '../../components/refine/corrections'
 import { RawTextEditor } from '../../components/refine/RawTextEditor'
@@ -34,9 +35,14 @@ export function ChapterView() {
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [target, setTarget] = useState<'text' | 'scenes'>('text')
-  const [sending, setSending] = useState(false)
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [streaming, setStreaming] = useState(false)
+  const [streamReply, setStreamReply] = useState('')
+  const [streamThinking, setStreamThinking] = useState('')
+  const [usage, setUsage] = useState<ChatUsage | null>(null)
   const [chatError, setChatError] = useState('')
+  const chatAbortRef = useRef<{ abort(): void } | null>(null)
+  const lastTurnRef = useRef<{ text: string; mentions: ChatMention } | null>(null)
 
   // Page state
   const [loading, setLoading] = useState(true)
@@ -76,11 +82,11 @@ export function ChapterView() {
     return () => { alive = false }
   }, [episodeId, chunkId, loadScenes])
 
-  // Auto-follow target with parse state (still user-switchable).
-  useEffect(() => { setTarget(parsed ? 'scenes' : 'text') }, [parsed])
-
   // Close any in-flight parse stream on unmount.
   useEffect(() => () => { parseEsRef.current?.close() }, [])
+
+  // Abort any in-flight chat stream on unmount.
+  useEffect(() => () => { chatAbortRef.current?.abort() }, [])
 
   // --- Text actions ---
   function acceptCorrection(c: TextCorrection) {
@@ -160,38 +166,62 @@ export function ChapterView() {
     setScenes(s.scenes); setSceneBaseline(JSON.stringify(s.scenes)); setScenesEdited(s.edited); setProposals({})
   }
 
-  // --- Chat ---
-  // Single send path: takes the full message list to POST. onSend appends the
-  // user turn first; onRetry re-sends the existing list (the failed user turn is
-  // still present, so nothing is re-appended) — avoids stale-closure bugs.
-  async function sendMessages(msgs: ChatMessage[]) {
-    setSending(true); setChatError(''); setSkipped(0)
-    try {
-      const res = await refineChat(episodeId, chunkId, msgs, target)
-      setMessages([...msgs, { role: 'assistant', content: res.reply }])
-      if (target === 'text' && res.corrections) {
-        setCorrections(res.corrections)
-      }
-      if (target === 'scenes' && res.proposals) {
-        const valid: Record<string, ScenePatch> = {}
-        let skip = 0
-        for (const p of res.proposals) {
-          if (scenes.some(s => s.scene_id === p.scene_id)) valid[p.scene_id] = p
-          else skip++
-        }
-        setProposals(valid); setSkipped(skip)
-      }
-    } catch (e) {
-      setChatError(String(e))
-    } finally { setSending(false) }
-  }
-  function onSend(content: string) {
-    const next = [...messages, { role: 'user' as const, content }]
+  // --- Chat (streaming) ---
+  function runTurn(history: ChatMessage[], text: string, mentions: ChatMention) {
+    lastTurnRef.current = { text, mentions }
+    const next = [...history, { role: 'user' as const, content: text }]
     setMessages(next)
-    sendMessages(next)
+    setStreaming(true); setChatError(''); setStreamReply(''); setStreamThinking(''); setSkipped(0)
+    let reply = ''
+    const handle = streamChat(
+      episodeId, chunkId,
+      { messages: next, thinking: thinkingEnabled, mentions },
+      {
+        onThinking: d => setStreamThinking(t => t + d),
+        onReply: d => { reply += d; setStreamReply(reply) },
+        onTool: (kind, payload) => {
+          if (kind === 'scene_edits') {
+            const p = payload as ScenePatch
+            if (scenes.some(s => s.scene_id === p.scene_id)) {
+              setProposals(prev => ({ ...prev, [p.scene_id]: p }))
+            } else {
+              setSkipped(n => n + 1)
+            }
+          } else {
+            const { corrections: cs } = payload as { corrections: TextCorrection[] }
+            setCorrections(cs ?? [])
+          }
+        },
+        onUsage: u => setUsage(u),
+        onDone: () => {
+          setStreaming(false)
+          setMessages(m => reply ? [...m, { role: 'assistant', content: reply }] : m)
+          setStreamReply(''); setStreamThinking('')
+        },
+        onError: detail => { setStreaming(false); setChatError(detail) },
+      },
+    )
+    chatAbortRef.current = handle
   }
-  function onRetry() {
-    if (messages.length > 0) sendMessages(messages)
+  function onSend(text: string, mentions: ChatMention) {
+    if (!streaming) runTurn(messages, text, mentions)
+  }
+  function onAbortChat() {
+    chatAbortRef.current?.abort()
+    setStreaming(false)
+    setMessages(m => streamReply ? [...m, { role: 'assistant', content: streamReply }] : m)
+    setStreamReply(''); setStreamThinking('')
+  }
+  function onRetryChat() {
+    const last = lastTurnRef.current
+    if (!last) return
+    const history = messages[messages.length - 1]?.role === 'user' ? messages.slice(0, -1) : messages
+    runTurn(history, last.text, last.mentions)
+  }
+  function onNewChat() {
+    chatAbortRef.current?.abort()
+    setMessages([]); setStreaming(false); setStreamReply(''); setStreamThinking('')
+    setChatError(''); setUsage(null)
   }
 
   return (
@@ -282,9 +312,19 @@ export function ChapterView() {
 
         <div className="lg:sticky lg:top-6 h-[70vh]">
           <RefineChat
-            messages={messages} target={target} canTargetScenes={parsed}
-            sending={sending} error={chatError}
-            onSend={onSend} onChangeTarget={setTarget} onRetry={onRetry}
+            messages={messages}
+            streaming={streaming}
+            streamReply={streamReply}
+            streamThinking={streamThinking}
+            thinkingEnabled={thinkingEnabled}
+            usage={usage}
+            error={chatError}
+            sceneIds={scenes.map(s => s.scene_id)}
+            onToggleThinking={() => setThinkingEnabled(v => !v)}
+            onSend={onSend}
+            onAbort={onAbortChat}
+            onRetry={onRetryChat}
+            onNewChat={onNewChat}
           />
         </div>
       </div>

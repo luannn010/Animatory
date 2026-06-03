@@ -164,12 +164,6 @@ export interface ChatMessage {
   content: string
 }
 
-export interface RefineResult {
-  reply: string
-  corrections?: TextCorrection[]
-  proposals?: ScenePatch[]
-}
-
 function chunkBase(episodeId: string, chunkId: string): string {
   return `${API_BASE_URL}/pipeline/episodes/${encodeURIComponent(episodeId)}/chunks/${encodeURIComponent(chunkId)}`
 }
@@ -212,13 +206,3 @@ export async function resetScenes(episodeId: string, chunkId: string): Promise<C
   return jsonOrThrow<ChunkScenes>(res, 'resetScenes')
 }
 
-export async function refineChat(
-  episodeId: string, chunkId: string, messages: ChatMessage[], target: 'text' | 'scenes',
-): Promise<RefineResult> {
-  const res = await fetch(`${chunkBase(episodeId, chunkId)}/refine`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, target }),
-  })
-  return jsonOrThrow<RefineResult>(res, 'refineChat')
-}

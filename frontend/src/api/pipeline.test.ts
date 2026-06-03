@@ -1,6 +1,6 @@
 // frontend/src/api/pipeline.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { saveText, refineChat, saveScenes } from './pipeline'
+import { saveText, saveScenes } from './pipeline'
 
 function mockFetch(body: unknown, ok = true, status = 200) {
   return vi.fn().mockResolvedValue({
@@ -22,15 +22,6 @@ describe('pipeline client', () => {
     expect(url).toContain('/pipeline/episodes/ep1/chunks/C001/text')
     expect(init.method).toBe('PUT')
     expect(JSON.parse(init.body).text).toBe('hi')
-  })
-
-  it('refineChat posts messages + target', async () => {
-    const fetchMock = mockFetch({ reply: 'ok', corrections: [] })
-    vi.stubGlobal('fetch', fetchMock)
-    const res = await refineChat('ep1', 'C001', [{ role: 'user', content: 'x' }], 'text')
-    expect(res.reply).toBe('ok')
-    const [, init] = fetchMock.mock.calls[0]
-    expect(JSON.parse(init.body).target).toBe('text')
   })
 
   it('saveScenes throws on non-ok', async () => {
