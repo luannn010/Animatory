@@ -1,5 +1,24 @@
 # Animatory — CLAUDE.md
 
+## Design Authority & UI Taste (read before any UI work)
+
+**The design specs are the source of truth.** Before building or changing any
+studio UI, read the relevant spec in `docs/superpowers/specs/` and follow it.
+The studio surface is governed by
+[`2026-06-02-studio-ui-design.md`](docs/superpowers/specs/2026-06-02-studio-ui-design.md);
+the transcript/parse pipeline by
+[`2026-06-02-transcript-pipeline-design.md`](docs/superpowers/specs/2026-06-02-transcript-pipeline-design.md).
+A spec defines *what* and *why* — do not silently deviate from layout, routes,
+data shapes, or flows it specifies. If a change requires departing from a spec,
+update the spec in the same change and say so.
+
+**Taste is mandatory, not optional.** Whenever you build, modify, or review
+frontend UI, invoke the **`ui-taste`** skill first. It encodes the concrete
+anti-AI-slop rules for this codebase (one accent color, token-only values, real
+loading/empty/error states, restrained motion, emoji-as-placeholder, etc.).
+"It compiles and renders" is not the bar — it must look *designed*. Run the
+skill's smell test before calling any UI task done.
+
 ## Frontend MVP
 
 ### Project Purpose
@@ -53,10 +72,13 @@ npm run build
 ```
 
 ### Frontend Conventions
-- All API calls via `src/api/index.ts` — never `fetch()` in components
-- Set `VITE_USE_MOCK=true` for zero-backend operation (mock fixtures)
-- Pill buttons: `rounded-full`; cards: `rounded-lg border border-hairline bg-canvas`
-- Header: dark teal gradient `linear-gradient(135deg, #1a3d4a 0%, #2d5a4f 100%)`
+- **Follow the design spec + run the `ui-taste` skill** (see "Design Authority & UI Taste" above) for any UI change
+- All API calls via `src/api/index.ts` (agents) or `src/studio/api.ts` (studio) — never `fetch()` in components
+- Set `VITE_USE_MOCK=true` for zero-backend operation (mock fixtures); studio has its own `VITE_STUDIO_USE_MOCK` (default mock)
+- One accent only: studio `#3772cf`; status colors are semantic, never decorative
+- Spacing/radius/color come from `tailwind.config.js` tokens — no arbitrary `[..px]` or hex literals
+- Pill buttons: `rounded-full`; cards: `rounded-lg border border-hairline bg-canvas`; controls: `rounded-md`
+- Header: dark teal gradient `linear-gradient(135deg, #1a3d4a 0%, #2d5a4f 100%)` (the one allowed gradient outside thumbnails)
 
 ---
 
