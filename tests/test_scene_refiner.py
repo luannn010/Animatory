@@ -87,13 +87,32 @@ async def test_refine_scenes_returns_reply_and_proposals():
 
 
 @pytest.mark.asyncio
-async def test_refine_scenes_retries_then_raises_on_bad_json():
+async def test_refine_scenes_retries_then_raises_on_malformed_json():
+    # A reply that OPENS with `{` is a genuine (malformed) extraction attempt,
+    # so it should retry and then raise — not be treated as a prose reply.
     with patch("animatory.scene_refiner.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
-        instance.post = AsyncMock(return_value=_make_mock_response("not json"))
+        instance.post = AsyncMock(return_value=_make_mock_response('{"reply": "oops'))
         MockClient.return_value = instance
 
         with pytest.raises(ValueError, match="could not parse JSON"):
             await refine_scenes("C001", "t", [], [{"role": "user", "content": "hi"}], max_retries=2)
+
+
+@pytest.mark.asyncio
+async def test_proofread_text_passes_prose_reply_through():
+    # A normal conversational turn ("hi") returns prose, not JSON. It must come
+    # back as the chat reply with no corrections — never raise (regression: 502).
+    with patch("animatory.scene_refiner.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(return_value=_make_mock_response("Hello! How can I help with this chapter?"))
+        MockClient.return_value = instance
+
+        out = await proofread_text("C001", "chapter text", [{"role": "user", "content": "hi"}])
+
+    assert out["reply"] == "Hello! How can I help with this chapter?"
+    assert out["corrections"] == []

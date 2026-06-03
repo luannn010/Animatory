@@ -70,7 +70,16 @@ async def _chat_json(system: str, user_content: str, messages: list[dict],
                 resp = await client.post(f"{endpoint}/v1/chat/completions", json=payload)
                 resp.raise_for_status()
                 raw = resp.json()["choices"][0]["message"]["content"]
-                return json.loads(_strip(raw))
+                cleaned = _strip(raw)
+                # Conversational turns ("hi", a question) come back as prose, not
+                # JSON. Only parse structured output when the model actually
+                # emitted JSON; otherwise return the prose as the chat reply with
+                # no edits. A string that opens with { or [ but fails to parse is
+                # a genuine malformed-JSON extraction attempt -> let it retry.
+                if cleaned[:1] not in ("{", "["):
+                    return {"reply": cleaned}
+                parsed = json.loads(cleaned)
+                return parsed if isinstance(parsed, dict) else {"reply": cleaned}
         except httpx.HTTPError as exc:
             logger.warning("[refiner] attempt %d/%d: cannot reach Qwen at %s -> %s",
                            attempt, retries, endpoint, repr(exc))
