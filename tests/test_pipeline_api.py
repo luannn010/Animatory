@@ -29,6 +29,20 @@ async def test_chunk_endpoint_custom_episode_id(client: AsyncClient, tmp_path, m
 
 
 @pytest.mark.asyncio
+async def test_chunk_persists_display_name(client: AsyncClient, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": ("raw.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    r = await client.post("/pipeline/chunk?episode_id=proj__ch1&name=Chapter%20One", files=files)
+    assert r.status_code == 200
+    assert r.json()["display_name"] == "Chapter One"
+
+    # display_name comes back on the episode listing (survives reload).
+    episodes = (await client.get("/pipeline/episodes")).json()
+    ep = next(e for e in episodes if e["episode_id"] == "proj__ch1")
+    assert ep["display_name"] == "Chapter One"
+
+
+@pytest.mark.asyncio
 async def test_chunk_empty_file(client: AsyncClient, tmp_path, monkeypatch):
     monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
     files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
@@ -194,3 +208,45 @@ async def test_get_chunk_text_404(client: AsyncClient, tmp_path, monkeypatch):
 
     assert (await client.get("/pipeline/episodes/ep8/chunks/C999/text")).status_code == 404
     assert (await client.get("/pipeline/episodes/nope/chunks/C001/text")).status_code == 404
+
+
+async def _chunk_one(client, tmp_path, monkeypatch, ep):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": (f"{ep}.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    await client.post(f"/pipeline/chunk?episode_id={ep}", files=files)
+    return (await client.get(f"/pipeline/episodes/{ep}/chunks")).json()["chunks"][0]["chunk_id"]
+
+
+@pytest.mark.asyncio
+async def test_save_and_get_edited_text(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "te1")
+
+    r = await client.put(f"/pipeline/episodes/te1/chunks/{cid}/text",
+                         json={"text": "cleaned chapter text"})
+    assert r.status_code == 200
+    assert r.json()["edited"] is True
+
+    g = await client.get(f"/pipeline/episodes/te1/chunks/{cid}/text")
+    assert g.json()["text"] == "cleaned chapter text"
+    assert g.json()["edited"] is True
+
+
+@pytest.mark.asyncio
+async def test_reset_edited_text(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "te2")
+    await client.put(f"/pipeline/episodes/te2/chunks/{cid}/text", json={"text": "edited"})
+
+    d = await client.delete(f"/pipeline/episodes/te2/chunks/{cid}/text/edited")
+    assert d.status_code == 200
+    assert d.json()["edited"] is False
+
+    g = await client.get(f"/pipeline/episodes/te2/chunks/{cid}/text")
+    assert "Sentence one." in g.json()["text"]
+    assert g.json()["edited"] is False
+
+
+@pytest.mark.asyncio
+async def test_put_text_unknown_chunk_404(client: AsyncClient, tmp_path, monkeypatch):
+    await _chunk_one(client, tmp_path, monkeypatch, "te3")
+    r = await client.put("/pipeline/episodes/te3/chunks/C999/text", json={"text": "x"})
+    assert r.status_code == 404

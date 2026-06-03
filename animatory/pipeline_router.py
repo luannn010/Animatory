@@ -27,6 +27,28 @@ def _processed_dir() -> Path:
     return p
 
 
+def _chunk_meta(ep_dir: Path, chunk_id: str) -> dict:
+    """Manifest entry for a chunk, or raise 404. Also 404s if not chunked."""
+    manifest_path = ep_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{ep_dir.name}' not found or not chunked yet")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    meta = next((c for c in manifest.get("chunks", []) if c["chunk_id"] == chunk_id), None)
+    if meta is None:
+        raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' not found in episode '{ep_dir.name}'")
+    return meta
+
+
+def _text_payload(ep_dir: Path, chunk_id: str, meta: dict) -> dict:
+    edited = ep_dir / f"{chunk_id}.edited.txt"
+    if edited.exists():
+        text, is_edited = edited.read_text(encoding="utf-8"), True
+    else:
+        text, is_edited = (ep_dir / meta["file"]).read_text(encoding="utf-8"), False
+    return {"chunk_id": chunk_id, "file": meta["file"],
+            "word_count": meta.get("word_count"), "text": text, "edited": is_edited}
+
+
 def _episode_status(ep_dir: Path) -> dict:
     manifest_path = ep_dir / "manifest.json"
     if not manifest_path.exists():
@@ -45,6 +67,7 @@ def _episode_status(ep_dir: Path) -> dict:
         status = "complete"
     return {
         "episode_id": ep_dir.name,
+        "display_name": manifest.get("display_name"),
         "chunk_count": chunk_count,
         "parsed_count": parsed_count,
         "status": status,
@@ -55,6 +78,7 @@ def _episode_status(ep_dir: Path) -> dict:
 async def chunk_transcript(
     file: UploadFile = File(...),
     episode_id: str | None = Query(default=None),
+    name: str | None = Query(default=None),
 ):
     contents = await file.read()
     # .strip() guards against trailing whitespace in episode_id (e.g. "ep1 "):
@@ -73,10 +97,17 @@ async def chunk_transcript(
 
     manifest_path = chunk_file(source_path, ep_dir)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Persist the human-friendly transcript name so the card title survives reloads.
+    display_name = (name or "").strip() or Path(file.filename or ep_id).stem
+    manifest["display_name"] = display_name
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
     logger.info("[chunk] episode=%s chunked into %d chunk(s)", ep_id, manifest["chunk_count"])
 
     return {
         "episode_id": ep_id,
+        "display_name": display_name,
         "chunk_count": manifest["chunk_count"],
         "output_dir": str(ep_dir),
     }
@@ -84,6 +115,10 @@ async def chunk_transcript(
 
 class ParseRequest(BaseModel):
     chunk_ids: list[str] | None = None
+
+
+class SaveTextRequest(BaseModel):
+    text: str
 
 
 @router.post("/parse/{episode_id}")
@@ -242,27 +277,34 @@ async def get_chunk_scenes(episode_id: str, chunk_id: str):
 
 @router.get("/episodes/{episode_id}/chunks/{chunk_id}/text")
 async def get_chunk_text(episode_id: str, chunk_id: str):
-    """Return the raw source text for a single chunk (the {chunk_id}.txt file).
+    """Return the text for a single chunk, preferring the edited version if present.
 
     Available as soon as the episode is chunked — independent of parsing — so the
     chapter view can show the original chapter text alongside its scenes.
     """
     ep_dir = _processed_dir() / episode_id
-    if not (ep_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
-
-    manifest = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
-    meta = next((c for c in manifest.get("chunks", []) if c["chunk_id"] == chunk_id), None)
-    if meta is None:
-        raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' not found in episode '{episode_id}'")
-
+    meta = _chunk_meta(ep_dir, chunk_id)
     txt_path = ep_dir / meta["file"]
     if not txt_path.exists():
         raise HTTPException(status_code=404, detail=f"Text file for '{chunk_id}' is missing")
+    return _text_payload(ep_dir, chunk_id, meta)
 
-    return {
-        "chunk_id": chunk_id,
-        "file": meta["file"],
-        "word_count": meta.get("word_count"),
-        "text": txt_path.read_text(encoding="utf-8"),
-    }
+
+@router.put("/episodes/{episode_id}/chunks/{chunk_id}/text")
+async def save_chunk_text(episode_id: str, chunk_id: str, body: SaveTextRequest):
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)
+    (ep_dir / f"{chunk_id}.edited.txt").write_text(body.text, encoding="utf-8")
+    logger.info("[text] episode=%s chunk=%s saved edited text (%d chars)",
+                episode_id, chunk_id, len(body.text))
+    return _text_payload(ep_dir, chunk_id, meta)
+
+
+@router.delete("/episodes/{episode_id}/chunks/{chunk_id}/text/edited")
+async def reset_chunk_text(episode_id: str, chunk_id: str):
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)
+    edited = ep_dir / f"{chunk_id}.edited.txt"
+    if edited.exists():
+        edited.unlink()
+    return _text_payload(ep_dir, chunk_id, meta)
