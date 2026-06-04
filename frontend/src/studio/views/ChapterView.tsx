@@ -11,6 +11,7 @@ import {
   type ChatMention, type ChatUsage, type ChatSessionMeta,
 } from '../../api/chat'
 import { RefineChat, type ChatDisplayMessage } from '../../components/refine/RefineChat'
+import { assistantTurn, storedToDisplay } from '../../components/refine/chatTurn'
 import { api } from '../../api'
 import { applyCorrection } from '../../components/refine/corrections'
 import { RawTextEditor } from '../../components/refine/RawTextEditor'
@@ -103,7 +104,7 @@ export function ChapterView() {
         const { session, messages: stored } = await getSession(episodeId, chunkId, list[0].session_id)
         if (!alive) return
         setActiveSessionId(session.session_id)
-        setMessages(stored.map(m => ({ role: m.role, content: m.content, toolCount: m.tool_calls.length })))
+        setMessages(stored.map(storedToDisplay))
         setUsage({ prompt_tokens: session.token_count, total_tokens: session.token_count, context_limit: 32768, skipped_mentions: [] })
       }
     }).catch(() => { /* no sessions yet */ })
@@ -221,6 +222,7 @@ export function ChapterView() {
     setStreaming(true); setChatError(''); setStreamReply(''); setStreamThinking(''); setSkipped(0)
     let reply = ''
     let toolCount = 0
+    let errored = false
     const handle = streamChat(
       episodeId, chunkId,
       { session_id: activeSessionId, message: text, thinking: thinkingEnabled, mentions },
@@ -243,11 +245,15 @@ export function ChapterView() {
         onUsage: u => setUsage(u),
         onDone: () => {
           setStreaming(false)
-          setMessages(m => reply ? [...m, { role: 'assistant', content: reply, toolCount }] : m)
+          // A finished turn must never vanish: commit it even when the model
+          // returned no prose (reasoning-only / tool-only / empty completion).
+          // Skip only when the turn errored — onError already surfaced that and
+          // the stream still closes, firing onDone.
+          if (!errored) setMessages(m => [...m, assistantTurn(reply, toolCount)])
           setStreamReply(''); setStreamThinking('')
           refreshSessions()
         },
-        onError: detail => { setStreaming(false); setChatError(detail) },
+        onError: detail => { errored = true; setStreaming(false); setChatError(detail) },
       },
     )
     chatAbortRef.current = handle
@@ -278,7 +284,7 @@ export function ChapterView() {
     if (streaming) return
     const { session, messages: stored } = await getSession(episodeId, chunkId, sessionId)
     setActiveSessionId(session.session_id)
-    setMessages(stored.map(m => ({ role: m.role, content: m.content, toolCount: m.tool_calls.length })))
+    setMessages(stored.map(storedToDisplay))
     setUsage({ prompt_tokens: session.token_count, total_tokens: session.token_count, context_limit: 32768, skipped_mentions: [] })
     setChatError('')
   }
