@@ -17,11 +17,12 @@ interface Props {
   onRejectProposal: () => void
   onReparse: () => void
   reparsing: boolean
+  onFocus: () => void
 }
 
 export function EditableSceneCard({
   scene, isEditing, proposal, onEdit, onCancel, onSaveLocal, onAcceptProposal, onRejectProposal,
-  onReparse, reparsing,
+  onReparse, reparsing, onFocus,
 }: Props) {
   if (isEditing) return <EditForm scene={scene} onCancel={onCancel} onSave={onSaveLocal} />
 
@@ -37,6 +38,12 @@ export function EditableSceneCard({
               {scene.shot_type}
             </span>
           )}
+          <button
+            onClick={onFocus}
+            className="text-[11px] text-steel hover:text-ink transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]"
+          >
+            Focus
+          </button>
           <button
             onClick={onReparse}
             disabled={reparsing}
