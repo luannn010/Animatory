@@ -566,3 +566,38 @@ def test_scene_model_accepts_enriched_fields():
     assert s.narration == ["Đêm xuống."]
     assert s.dialogue[0].emotion == "angry"
     assert s.dialogue[0].intensity == "high"
+
+
+async def _chunk_episode(client, tmp_path, monkeypatch, ep="enttest"):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    files = {"file": (f"{ep}.txt", io.BytesIO(TINY_TXT), "text/plain")}
+    r = await client.post(f"/pipeline/chunk?episode_id={ep}", files=files)
+    assert r.status_code == 200
+    return ep
+
+
+@pytest.mark.asyncio
+async def test_entities_get_empty_then_put_round_trip(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch)
+
+    r = await client.get(f"/pipeline/episodes/{ep}/entities")
+    assert r.status_code == 200
+    assert r.json()["characters"] == []
+
+    body = {
+        "characters": [{"canonical": "Đại Càn", "aliases": ["đại cản"]}],
+        "locations": [{"canonical": "Cao's Palace", "aliases": []}],
+    }
+    r = await client.put(f"/pipeline/episodes/{ep}/entities", json=body)
+    assert r.status_code == 200
+    assert r.json()["characters"][0]["canonical"] == "Đại Càn"
+
+    r = await client.get(f"/pipeline/episodes/{ep}/entities")
+    assert r.json()["characters"][0]["aliases"] == ["đại cản"]
+
+
+@pytest.mark.asyncio
+async def test_entities_404_for_unknown_episode(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    r = await client.get("/pipeline/episodes/nope/entities")
+    assert r.status_code == 404

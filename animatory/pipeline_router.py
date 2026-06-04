@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
+from animatory import entity_registry
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode
@@ -169,6 +170,16 @@ class SceneModel(BaseModel):
 
 class SaveScenesRequest(BaseModel):
     scenes: list[SceneModel]
+
+
+class AliasEntry(BaseModel):
+    canonical: str
+    aliases: list[str] = []
+
+
+class EntityRegistryRequest(BaseModel):
+    characters: list[AliasEntry] = []
+    locations: list[AliasEntry] = []
 
 
 class ChatMentions(BaseModel):
@@ -366,6 +377,30 @@ async def reset_chunk_scenes(episode_id: str, chunk_id: str):
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
     return doc
+
+
+@router.get("/episodes/{episode_id}/entities")
+async def get_entities(episode_id: str):
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+    return entity_registry.load(episode_id, ep_dir).to_dict()
+
+
+@router.put("/episodes/{episode_id}/entities")
+async def save_entities(episode_id: str, body: EntityRegistryRequest):
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+    reg = entity_registry.EntityRegistry(
+        episode_id=episode_id,
+        characters=[e.model_dump() for e in body.characters],
+        locations=[e.model_dump() for e in body.locations],
+    )
+    entity_registry.save(reg, ep_dir, now=_now())
+    logger.info("[entities] episode=%s saved %d character(s), %d location(s)",
+                episode_id, len(reg.characters), len(reg.locations))
+    return reg.to_dict()
 
 
 @router.get("/episodes/{episode_id}/chunks/{chunk_id}/text")
