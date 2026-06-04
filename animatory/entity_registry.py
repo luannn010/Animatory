@@ -52,6 +52,39 @@ class EntityRegistry:
             "locations": [e["canonical"] for e in self.locations],
         }
 
+    def _alias_map(self, entries: list[dict]) -> dict:
+        m: dict[str, str] = {}
+        for e in entries:
+            canonical = e["canonical"]
+            m[_key(canonical)] = canonical
+            for a in e.get("aliases", []):
+                m[_key(a)] = canonical
+        return m
+
+    def normalize_scene(self, scene: dict) -> dict:
+        """Return a copy of *scene* with structured proper-noun fields mapped to
+        canonical spellings. Only ``location``, ``characters[]`` and
+        ``dialogue[].character`` are touched — free prose is never altered."""
+        char_map = self._alias_map(self.characters)
+        loc_map = self._alias_map(self.locations)
+
+        def canon(name: str, m: dict) -> str:
+            return m.get(_key(name), name) if isinstance(name, str) else name
+
+        scene = dict(scene)
+        if isinstance(scene.get("location"), str):
+            scene["location"] = canon(scene["location"], loc_map)
+        if isinstance(scene.get("characters"), list):
+            scene["characters"] = [canon(c, char_map) for c in scene["characters"]]
+        if isinstance(scene.get("dialogue"), list):
+            scene["dialogue"] = [
+                {**d, "character": canon(d["character"], char_map)}
+                if isinstance(d, dict) and "character" in d
+                else d
+                for d in scene["dialogue"]
+            ]
+        return scene
+
 
 def _path(episode_dir: Path) -> Path:
     return episode_dir / "entities.json"

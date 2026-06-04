@@ -37,3 +37,46 @@ def test_known_names_lists_canonicals(tmp_path):
     )
     known = reg.known_names()
     assert known == {"characters": ["Tư An"], "locations": ["Palace"]}
+
+
+def _reg():
+    return er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Đại Càn", "aliases": ["đại cản"]}],
+        locations=[{"canonical": "Cao's Palace", "aliases": ["cao palace"]}],
+    )
+
+
+def test_normalize_scene_maps_alias_to_canonical():
+    scene = {
+        "scene_id": "C001_S01",
+        "location": "cao palace",
+        "characters": ["đại cản", "Tư An"],
+        "dialogue": [
+            {"character": "đại cản", "line": "Quỳ xuống.", "emotion": "commanding"},
+        ],
+        "action": "đại cản bước vào",  # free prose — must NOT be touched
+    }
+    out = _reg().normalize_scene(scene)
+    assert out["location"] == "Cao's Palace"
+    assert out["characters"] == ["Đại Càn", "Tư An"]
+    assert out["dialogue"][0]["character"] == "Đại Càn"
+    assert out["dialogue"][0]["emotion"] == "commanding"  # preserved
+    assert out["action"] == "đại cản bước vào"  # prose untouched
+
+
+def test_normalize_scene_is_case_insensitive_diacritic_significant():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Tư An", "aliases": []}],
+    )
+    scene = {"characters": ["TƯ AN", "Tu An"], "dialogue": [], "location": ""}
+    out = reg.normalize_scene(scene)
+    # "TƯ AN" matches canonical case-insensitively; "Tu An" (no diacritics) does not.
+    assert out["characters"] == ["Tư An", "Tu An"]
+
+
+def test_normalize_scene_does_not_mutate_input():
+    scene = {"location": "cao palace", "characters": [], "dialogue": []}
+    _reg().normalize_scene(scene)
+    assert scene["location"] == "cao palace"
