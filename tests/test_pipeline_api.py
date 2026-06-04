@@ -4,6 +4,7 @@ import io, json
 import pytest
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
+from animatory.pipeline_router import SceneModel, SceneDialogueModel
 
 TINY_TXT = b"Sentence one. Sentence two. " * 30  # ~180 words
 
@@ -533,3 +534,35 @@ async def test_chat_stream_no_duplicate_user_on_retry(client: AsyncClient, tmp_p
     # exactly one user turn + one assistant turn — no orphan from the failed attempt
     assert [m["role"] for m in msgs] == ["user", "assistant"]
     assert msgs[0]["content"] == "hello"
+
+
+def test_scene_model_defaults_narration_and_optional_emotion():
+    # Old-shaped scene (no narration / emotion) still validates.
+    s = SceneModel(
+        scene_id="C001_S01",
+        location="Hall",
+        characters=["A"],
+        shot_type="wide",
+        action="x",
+        dialogue=[{"character": "A", "line": "hi"}],
+        mood="tense",
+    )
+    assert s.narration == []
+    assert s.dialogue[0].emotion is None
+    assert s.dialogue[0].intensity is None
+
+
+def test_scene_model_accepts_enriched_fields():
+    s = SceneModel(
+        scene_id="C001_S01",
+        location="Hall",
+        characters=["A"],
+        shot_type="wide",
+        action="x",
+        dialogue=[{"character": "A", "line": "hi", "emotion": "angry", "intensity": "high"}],
+        mood="tense",
+        narration=["Đêm xuống."],
+    )
+    assert s.narration == ["Đêm xuống."]
+    assert s.dialogue[0].emotion == "angry"
+    assert s.dialogue[0].intensity == "high"

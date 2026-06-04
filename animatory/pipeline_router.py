@@ -152,6 +152,8 @@ class SaveTextRequest(BaseModel):
 class SceneDialogueModel(BaseModel):
     character: str
     line: str
+    emotion: str | None = None
+    intensity: str | None = None
 
 
 class SceneModel(BaseModel):
@@ -162,6 +164,7 @@ class SceneModel(BaseModel):
     action: str
     dialogue: list[SceneDialogueModel]
     mood: str
+    narration: list[str] = []
 
 
 class SaveScenesRequest(BaseModel):
