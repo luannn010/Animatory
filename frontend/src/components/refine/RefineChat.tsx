@@ -109,18 +109,19 @@ export function RefineChat(props: Props) {
                   onBlur={commitRename}
                   className={`flex-1 rounded-md border border-hairline bg-canvas px-2 py-1 text-ink ${ctrl}`} />
               ) : (
-                <button type="button" onClick={() => { onSelectSession(s.session_id); setHistoryOpen(false) }}
-                  className={`flex-1 text-left truncate hover:text-ink transition-colors rounded-md ${ctrl} ` +
+                <button type="button" disabled={streaming}
+                  onClick={() => { onSelectSession(s.session_id); setHistoryOpen(false) }}
+                  className={`flex-1 text-left truncate hover:text-ink transition-colors rounded-md disabled:opacity-50 disabled:cursor-not-allowed ${ctrl} ` +
                     (s.session_id === activeSessionId ? 'text-ink font-medium' : 'text-steel')}>
                   {s.title ?? 'Untitled'} <span className="text-stone">· {s.message_count} msg</span>
                 </button>
               )}
-              <button type="button" onClick={() => startRename(s)} aria-label="Rename chat"
-                className={`text-stone hover:text-ink transition-colors rounded-md px-1 ${ctrl}`}>Rename</button>
-              <button type="button"
+              <button type="button" onClick={() => startRename(s)} aria-label="Rename chat" disabled={streaming}
+                className={`text-stone hover:text-ink transition-colors rounded-md px-1 disabled:opacity-50 disabled:cursor-not-allowed ${ctrl}`}>Rename</button>
+              <button type="button" disabled={streaming}
                 onClick={() => { if (window.confirm('Delete this chat?')) onDeleteSession(s.session_id) }}
                 aria-label="Delete chat"
-                className={`text-stone hover:text-brand-error transition-colors rounded-md px-1 ${ctrl}`}>Delete</button>
+                className={`text-stone hover:text-brand-error transition-colors rounded-md px-1 disabled:opacity-50 disabled:cursor-not-allowed ${ctrl}`}>Delete</button>
             </div>
           ))}
         </div>
