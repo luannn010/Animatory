@@ -1,0 +1,213 @@
+{
+  "source_file": "ep1.txt",
+  "total_words": 84647,
+  "total_chars": 376816,
+  "config": {
+    "target_words": 4600,
+    "overlap_words": 250,
+    "min_chunk_words": 500
+  },
+  "chunk_count": 20,
+  "chunks": [
+    {
+      "chunk_id": "C001",
+      "file": "C001.txt",
+      "word_start": 0,
+      "word_end": 4619,
+      "char_start": 0,
+      "char_end": 20541,
+      "word_count": 4619,
+      "overlap_prev_words": 0
+    },
+    {
+      "chunk_id": "C002",
+      "file": "C002.txt",
+      "word_start": 4369,
+      "word_end": 8995,
+      "char_start": 19428,
+      "char_end": 40129,
+      "word_count": 4626,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C003",
+      "file": "C003.txt",
+      "word_start": 8745,
+      "word_end": 13364,
+      "char_start": 38983,
+      "char_end": 59534,
+      "word_count": 4619,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C004",
+      "file": "C004.txt",
+      "word_start": 13114,
+      "word_end": 17753,
+      "char_start": 58406,
+      "char_end": 78982,
+      "word_count": 4639,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C005",
+      "file": "C005.txt",
+      "word_start": 17503,
+      "word_end": 22116,
+      "char_start": 77886,
+      "char_end": 98528,
+      "word_count": 4613,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C006",
+      "file": "C006.txt",
+      "word_start": 21866,
+      "word_end": 26512,
+      "char_start": 97407,
+      "char_end": 117930,
+      "word_count": 4646,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C007",
+      "file": "C007.txt",
+      "word_start": 26262,
+      "word_end": 30864,
+      "char_start": 116806,
+      "char_end": 137362,
+      "word_count": 4602,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C008",
+      "file": "C008.txt",
+      "word_start": 30614,
+      "word_end": 35238,
+      "char_start": 136262,
+      "char_end": 156776,
+      "word_count": 4624,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C009",
+      "file": "C009.txt",
+      "word_start": 34988,
+      "word_end": 39596,
+      "char_start": 155645,
+      "char_end": 176121,
+      "word_count": 4608,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C010",
+      "file": "C010.txt",
+      "word_start": 39346,
+      "word_end": 43946,
+      "char_start": 175023,
+      "char_end": 195488,
+      "word_count": 4600,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C011",
+      "file": "C011.txt",
+      "word_start": 43696,
+      "word_end": 48326,
+      "char_start": 194397,
+      "char_end": 214861,
+      "word_count": 4630,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C012",
+      "file": "C012.txt",
+      "word_start": 48076,
+      "word_end": 52700,
+      "char_start": 213782,
+      "char_end": 234434,
+      "word_count": 4624,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C013",
+      "file": "C013.txt",
+      "word_start": 52450,
+      "word_end": 57056,
+      "char_start": 233326,
+      "char_end": 253931,
+      "word_count": 4606,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C014",
+      "file": "C014.txt",
+      "word_start": 56806,
+      "word_end": 61409,
+      "char_start": 252803,
+      "char_end": 273407,
+      "word_count": 4603,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C015",
+      "file": "C015.txt",
+      "word_start": 61159,
+      "word_end": 65766,
+      "char_start": 272272,
+      "char_end": 292814,
+      "word_count": 4607,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C016",
+      "file": "C016.txt",
+      "word_start": 65516,
+      "word_end": 70116,
+      "char_start": 291699,
+      "char_end": 312267,
+      "word_count": 4600,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C017",
+      "file": "C017.txt",
+      "word_start": 69866,
+      "word_end": 74526,
+      "char_start": 311159,
+      "char_end": 331925,
+      "word_count": 4660,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C018",
+      "file": "C018.txt",
+      "word_start": 74276,
+      "word_end": 78882,
+      "char_start": 330789,
+      "char_end": 351242,
+      "word_count": 4606,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C019",
+      "file": "C019.txt",
+      "word_start": 78632,
+      "word_end": 83264,
+      "char_start": 350136,
+      "char_end": 370654,
+      "word_count": 4632,
+      "overlap_prev_words": 250
+    },
+    {
+      "chunk_id": "C020",
+      "file": "C020.txt",
+      "word_start": 83014,
+      "word_end": 84647,
+      "char_start": 369549,
+      "char_end": 376816,
+      "word_count": 1633,
+      "overlap_prev_words": 250
+    }
+  ]
+}
