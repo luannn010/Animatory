@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
-from animatory import entity_registry
+from animatory import entity_registry, scene_source
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode, reparse_scene
@@ -406,6 +406,25 @@ async def reparse_chunk_scene(episode_id: str, chunk_id: str, scene_id: str):
     return {"scene": scene}
 
 
+@router.get("/episodes/{episode_id}/chunks/{chunk_id}/scenes/{scene_id}/source")
+async def get_scene_source(episode_id: str, chunk_id: str, scene_id: str):
+    """Best-effort: locate where this scene's text sits in the chapter source.
+
+    Read-only. Uses edited-preferred text + scenes (the same the panel renders),
+    so returned line indices line up with the chapter text the client displays.
+    """
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)  # 404 if episode/chunk unknown
+    doc = _scenes_payload(ep_dir, chunk_id)
+    if doc is None:
+        raise HTTPException(status_code=409, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    scene = next((s for s in doc.get("scenes", []) if s.get("scene_id") == scene_id), None)
+    if scene is None:
+        raise HTTPException(status_code=404, detail=f"Scene '{scene_id}' not found in chunk '{chunk_id}'")
+    text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    return scene_source.locate(scene, text)
+
+
 @router.get("/episodes/{episode_id}/entities")
 async def get_entities(episode_id: str):
     ep_dir = _processed_dir() / episode_id
@@ -500,7 +519,9 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
     ]
     wanted = set(body.mentions.scenes) & valid_ids
     mentioned = [s for s in all_scenes if s["scene_id"] in wanted]
-    raw_text = _text_payload(ep_dir, chunk_id, meta)["text"] if body.mentions.raw else None
+    chapter_text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    scene_sources = {s["scene_id"]: scene_source.locate(s, chapter_text)["excerpt"] for s in mentioned}
+    raw_text = chapter_text if body.mentions.raw else None
 
     prior = await store.get_messages(session_id)
     is_first = len(prior) == 0
@@ -518,6 +539,7 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
         async for ev in stream_chat(
             chunk_id=chunk_id, scene_index=scene_index, mentioned_scenes=mentioned,
             raw_text=raw_text, messages=history, thinking=body.thinking,
+            scene_sources=scene_sources,
         ):
             etype = ev["event"]
             if etype == "done":

@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   getChunkScenes, getChunkText, parseEpisode,
-  saveScenes, saveText, resetScenes, resetText, reparseScene,
-  type PipelineScene, type ScenePatch, type TextCorrection,
+  saveScenes, saveText, resetScenes, resetText, reparseScene, getSceneSource,
+  type PipelineScene, type ScenePatch, type TextCorrection, type SceneSource,
 } from '../../api/pipeline'
 import {
   streamChat, listSessions, createSession, getSession, renameSession, deleteSession,
@@ -16,6 +16,7 @@ import { api } from '../../api'
 import { applyCorrection } from '../../components/refine/corrections'
 import { RawTextEditor } from '../../components/refine/RawTextEditor'
 import { EditableSceneCard } from '../../components/refine/EditableSceneCard'
+import { SceneFocusPanel } from '../../components/refine/SceneFocusPanel'
 import { EntityRegistryPanel } from '../../components/refine/EntityRegistryPanel'
 import { VoiceProfilePanel } from '../../components/refine/VoiceProfilePanel'
 
@@ -40,6 +41,9 @@ export function ChapterView() {
   const [savingScenes, setSavingScenes] = useState(false)
   const [reparsing, setReparsing] = useState<Set<string>>(new Set())
   const [reparseError, setReparseError] = useState('')
+  const [focusedSceneId, setFocusedSceneId] = useState<string | null>(null)
+  const [sceneSource, setSceneSource] = useState<{ loading: boolean; data: SceneSource | null; error: string }>(
+    { loading: false, data: null, error: '' })
 
   // Chat state (server-authoritative sessions)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
@@ -116,6 +120,17 @@ export function ChapterView() {
 
   // Abort any in-flight chat stream on unmount.
   useEffect(() => () => { chatAbortRef.current?.abort() }, [])
+
+  // Fetch best-effort source location whenever a scene is focused.
+  useEffect(() => {
+    if (!focusedSceneId) return
+    let alive = true
+    setSceneSource({ loading: true, data: null, error: '' })
+    getSceneSource(episodeId, chunkId, focusedSceneId)
+      .then(data => { if (alive) setSceneSource({ loading: false, data, error: '' }) })
+      .catch(e => { if (alive) setSceneSource({ loading: false, data: null, error: `Couldn't load source: ${String(e)}` }) })
+    return () => { alive = false }
+  }, [focusedSceneId, episodeId, chunkId])
 
   // --- Text actions ---
   function acceptCorrection(c: TextCorrection) {
@@ -304,6 +319,35 @@ export function ChapterView() {
     }
   }
 
+  const focusedScene = scenes.find(s => s.scene_id === focusedSceneId) ?? null
+  const seedDraft = focusedScene
+    ? `@Scene${(focusedScene.scene_id.match(/_S(\d+)$/)?.[1] ?? '').replace(/^0+(?=\d)/, '')} `
+    : ''
+
+  const chatEl = (
+    <RefineChat
+      messages={messages}
+      streaming={streaming}
+      streamReply={streamReply}
+      streamThinking={streamThinking}
+      thinkingEnabled={thinkingEnabled}
+      usage={usage}
+      error={chatError}
+      sceneIds={scenes.map(s => s.scene_id)}
+      seedDraft={seedDraft}
+      sessions={sessions}
+      activeSessionId={activeSessionId}
+      onToggleThinking={() => setThinkingEnabled(v => !v)}
+      onSend={onSend}
+      onAbort={onAbortChat}
+      onRetry={onRetryChat}
+      onNewChat={onNewChat}
+      onSelectSession={onSelectSession}
+      onRenameSession={onRenameSession}
+      onDeleteSession={onDeleteSession}
+    />
+  )
+
   return (
     <div className="max-w-6xl">
       <Link to={`/project/${id}/parse`} className="inline-flex items-center gap-1.5 text-xs text-steel hover:text-ink mb-4">
@@ -387,6 +431,7 @@ export function ChapterView() {
                       onRejectProposal={() => rejectProposal(s.scene_id)}
                       onReparse={() => onReparseScene(s.scene_id)}
                       reparsing={reparsing.has(s.scene_id)}
+                      onFocus={() => setFocusedSceneId(s.scene_id)}
                     />
                   ))}
                 </div>
@@ -396,26 +441,7 @@ export function ChapterView() {
         </div>
 
         <div className="lg:sticky lg:top-6 h-[70vh]">
-          <RefineChat
-            messages={messages}
-            streaming={streaming}
-            streamReply={streamReply}
-            streamThinking={streamThinking}
-            thinkingEnabled={thinkingEnabled}
-            usage={usage}
-            error={chatError}
-            sceneIds={scenes.map(s => s.scene_id)}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onToggleThinking={() => setThinkingEnabled(v => !v)}
-            onSend={onSend}
-            onAbort={onAbortChat}
-            onRetry={onRetryChat}
-            onNewChat={onNewChat}
-            onSelectSession={onSelectSession}
-            onRenameSession={onRenameSession}
-            onDeleteSession={onDeleteSession}
-          />
+          {!focusedSceneId && chatEl}
         </div>
       </div>
 
@@ -427,6 +453,21 @@ export function ChapterView() {
           <VoiceProfilePanel episodeId={episodeId} refreshKey={profilesRefresh} />
         </div>
       </section>
+
+      {focusedScene && (
+        <SceneFocusPanel
+          scene={focusedScene}
+          proposal={proposals[focusedScene.scene_id]}
+          source={sceneSource}
+          chapterText={text}
+          onClose={() => setFocusedSceneId(null)}
+          onEdit={() => { setEditing(prev => new Set(prev).add(focusedScene.scene_id)); setFocusedSceneId(null) }}
+          onAcceptProposal={() => acceptProposal(focusedScene.scene_id)}
+          onRejectProposal={() => rejectProposal(focusedScene.scene_id)}
+        >
+          {chatEl}
+        </SceneFocusPanel>
+      )}
     </div>
   )
 }

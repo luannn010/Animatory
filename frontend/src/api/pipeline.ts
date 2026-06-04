@@ -276,3 +276,20 @@ export async function reparseScene(
   return jsonOrThrow<{ scene: PipelineScene }>(res, 'reparseScene')
 }
 
+export interface SceneSource {
+  found: boolean
+  match_lines: number[]
+  line_start: number
+  line_end: number
+  excerpt: string
+}
+
+export async function getSceneSource(
+  episodeId: string, chunkId: string, sceneId: string,
+): Promise<SceneSource> {
+  const res = await fetch(
+    `${chunkBase(episodeId, chunkId)}/scenes/${encodeURIComponent(sceneId)}/source`,
+  )
+  return jsonOrThrow<SceneSource>(res, 'getSceneSource')
+}
+

@@ -1,5 +1,5 @@
 // frontend/src/components/refine/RefineChat.tsx
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChatMention, ChatUsage, ChatSessionMeta } from '../../api/chat'
 import { parseMentions } from './mentions'
 
@@ -18,6 +18,7 @@ interface Props {
   usage: ChatUsage | null
   error: string
   sceneIds: string[]
+  seedDraft?: string
   sessions: ChatSessionMeta[]
   activeSessionId: string | null
   onToggleThinking: () => void
@@ -33,7 +34,7 @@ interface Props {
 export function RefineChat(props: Props) {
   const {
     messages, streaming, streamReply, streamThinking, thinkingEnabled, usage, error,
-    sceneIds, sessions, activeSessionId, onToggleThinking, onSend, onAbort, onRetry,
+    sceneIds, seedDraft, sessions, activeSessionId, onToggleThinking, onSend, onAbort, onRetry,
     onNewChat, onSelectSession, onRenameSession, onDeleteSession,
   } = props
   const [draft, setDraft] = useState('')
@@ -41,6 +42,10 @@ export function RefineChat(props: Props) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+
+  useEffect(() => {
+    if (seedDraft) setDraft(seedDraft)
+  }, [seedDraft])
 
   const activeTitle = sessions.find(s => s.session_id === activeSessionId)?.title ?? 'New chat'
 

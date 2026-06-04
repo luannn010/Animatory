@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import type { PipelineScene, ScenePatch } from '../../api/pipeline'
 import { EMOTIONS, INTENSITIES } from '../../api/pipeline'
+import { SceneReadView } from './SceneReadView'
 
 const SHOT_TYPES = ['wide', 'medium', 'close-up', 'insert', 'POV']
 
@@ -16,15 +17,14 @@ interface Props {
   onRejectProposal: () => void
   onReparse: () => void
   reparsing: boolean
+  onFocus: () => void
 }
 
 export function EditableSceneCard({
   scene, isEditing, proposal, onEdit, onCancel, onSaveLocal, onAcceptProposal, onRejectProposal,
-  onReparse, reparsing,
+  onReparse, reparsing, onFocus,
 }: Props) {
   if (isEditing) return <EditForm scene={scene} onCancel={onCancel} onSave={onSaveLocal} />
-
-  const tags = [scene.location, scene.characters.join(', '), scene.mood].filter(Boolean)
 
   return (
     <div className="bg-canvas border border-hairline rounded-md p-4">
@@ -38,6 +38,12 @@ export function EditableSceneCard({
               {scene.shot_type}
             </span>
           )}
+          <button
+            onClick={onFocus}
+            className="text-[11px] text-steel hover:text-ink transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]"
+          >
+            Focus
+          </button>
           <button
             onClick={onReparse}
             disabled={reparsing}
@@ -54,59 +60,13 @@ export function EditableSceneCard({
         </div>
       </div>
 
-      {scene.action && (
-        <p className="text-sm font-medium text-ink leading-snug mb-2.5">{scene.action}</p>
-      )}
-
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3 last:mb-0">
-          {tags.map((t, i) => (
-            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-xs text-[11px] bg-surface text-steel border border-hairline">
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {scene.dialogue.length > 0 && (
-        <dl className="space-y-1 border-t border-hairline pt-2.5">
-          {scene.dialogue.map((d, i) => (
-            <div key={i} className="flex gap-2 text-xs leading-snug">
-              <dt className="font-medium text-steel shrink-0">{d.character}</dt>
-              <dd className="text-ink">
-                {d.line}
-                {d.emotion && (
-                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-xs text-[10px] bg-surface text-steel border border-hairline align-middle">
-                    {d.emotion}{d.intensity ? ` · ${d.intensity}` : ''}
-                  </span>
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      {scene.narration && scene.narration.length > 0 && (
-        <div className="mt-2.5 border-t border-hairline pt-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-stone mb-1">Narration</div>
-          <ul className="space-y-1 text-xs text-steel italic leading-snug">
-            {scene.narration.map((n, i) => <li key={i}>{n}</li>)}
-          </ul>
-        </div>
-      )}
+      <SceneReadView scene={scene} />
 
       {proposal && (
         <div className="mt-3 rounded-md border border-[#3772cf]/40 bg-[#3772cf]/5 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#3772cf] mb-1.5">Suggested</div>
-          <dl className="space-y-1 mb-2">
-            {Object.entries(proposal.changes).map(([k, v]) => (
-              <div key={k} className="text-xs">
-                <span className="text-stone">{k}: </span>
-                <span className="text-ink">{Array.isArray(v) ? JSON.stringify(v) : String(v)}</span>
-              </div>
-            ))}
-          </dl>
-          {proposal.rationale && <p className="text-[11px] text-steel mb-2">{proposal.rationale}</p>}
+          <SceneReadView scene={{ ...scene, ...proposal.changes }} />
+          {proposal.rationale && <p className="text-[11px] text-steel mt-2 mb-2">{proposal.rationale}</p>}
           <div className="flex gap-2">
             <button
               onClick={onAcceptProposal}

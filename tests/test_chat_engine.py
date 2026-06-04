@@ -177,3 +177,27 @@ async def test_generate_title_falls_back_on_error():
         MockClient.return_value = inst
         title = await generate_title([{"role": "user", "content": "Make the mood darker please and tighten dialogue everywhere"}])
     assert title == "Make the mood darker please and tighten "  # first 40 chars of first user msg
+
+
+def test_build_messages_injects_source_passage_for_mentioned_scene():
+    msgs = _build_messages(
+        scene_index=[{"scene_id": "C001_S03", "location": "Phố", "characters": ["Tu An"]}],
+        mentioned_scenes=[{"scene_id": "C001_S03", "dialogue": []}],
+        raw_text=None,
+        messages=[{"role": "user", "content": "fix scene 3"}],
+        use_tools=True,
+        scene_sources={"C001_S03": "Tu An chạy trốn khỏi phủ công chúa."},
+    )
+    system_msgs = [m for m in msgs if m["role"] == "system"]
+    assert len(system_msgs) == 1                      # still exactly one leading system turn
+    assert "Source passage for C001_S03" in msgs[0]["content"]
+    assert "Tu An chạy trốn" in msgs[0]["content"]
+
+
+def test_build_messages_skips_empty_source_passage():
+    msgs = _build_messages(
+        scene_index=[], mentioned_scenes=[{"scene_id": "C001_S03"}], raw_text=None,
+        messages=[{"role": "user", "content": "hi"}], use_tools=True,
+        scene_sources={"C001_S03": ""},               # no match found -> no block
+    )
+    assert "Source passage" not in msgs[0]["content"]
