@@ -601,3 +601,23 @@ async def test_entities_404_for_unknown_episode(client, tmp_path, monkeypatch):
     monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
     r = await client.get("/pipeline/episodes/nope/entities")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_voice_profiles_route_aggregates_scenes(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="vptest")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    (ep_dir / f"{cid}_scenes.json").write_text(_json.dumps({
+        "chunk_id": cid, "scenes": [
+            {"scene_id": f"{cid}_S01", "dialogue": [
+                {"character": "Tư An", "line": "x", "emotion": "angry"}]}]
+    }), encoding="utf-8")
+
+    r = await client.get(f"/pipeline/episodes/{ep}/voice-profiles")
+    assert r.status_code == 200
+    profiles = r.json()["profiles"]
+    assert profiles[0]["character"] == "Tư An"
+    assert profiles[0]["dominant_emotion"] == "angry"

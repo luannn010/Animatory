@@ -17,6 +17,7 @@ from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode
 from animatory.chat_engine import stream_chat, generate_title
+from animatory.voice_profiles import aggregate
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
@@ -401,6 +402,20 @@ async def save_entities(episode_id: str, body: EntityRegistryRequest):
     logger.info("[entities] episode=%s saved %d character(s), %d location(s)",
                 episode_id, len(reg.characters), len(reg.locations))
     return reg.to_dict()
+
+
+@router.get("/episodes/{episode_id}/voice-profiles")
+async def get_voice_profiles(episode_id: str):
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+    manifest = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    all_scenes: list[dict] = []
+    for c in manifest.get("chunks", []):
+        doc = _scenes_payload(ep_dir, c["chunk_id"])
+        if doc:
+            all_scenes.extend(doc.get("scenes", []))
+    return {"episode_id": episode_id, "profiles": aggregate(all_scenes)}
 
 
 @router.get("/episodes/{episode_id}/chunks/{chunk_id}/text")
