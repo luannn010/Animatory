@@ -160,6 +160,7 @@ export interface TextCorrection {
   replace: string
   rationale: string
   all_occurrences: boolean
+  category?: string  // name | location | word | dialogue (spell-check pass)
 }
 
 export interface ScenePatch {
@@ -274,6 +275,19 @@ export async function reparseScene(
     { method: 'POST' },
   )
   return jsonOrThrow<{ scene: PipelineScene }>(res, 'reparseScene')
+}
+
+/** Pre-parse spell-check: proofread the given text, return keep/apply suggestions. */
+export async function spellcheckText(
+  episodeId: string, chunkId: string, text: string,
+): Promise<TextCorrection[]> {
+  const res = await fetch(`${chunkBase(episodeId, chunkId)}/spellcheck`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  const data = await jsonOrThrow<{ corrections: TextCorrection[] }>(res, 'spellcheckText')
+  return data.corrections
 }
 
 export interface SceneSource {

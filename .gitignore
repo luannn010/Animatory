@@ -5,6 +5,11 @@ __pycache__/
 
 # Local environment config (keep .env.example tracked)
 .env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # Runtime SQLite DB (regenerated at startup)
 animatory.db
@@ -12,3 +17,12 @@ animatory.db
 # Temp test/output logs
 *_out.txt
 *_run.log
+
+# Generated / processed pipeline data (not source)
+/processed/
+/Animatorymockup/
+/mockup/
+/fixtures/
+
+# Internal planning docs (specs stay tracked, plans do not)
+/docs/superpowers/plans/

@@ -6,6 +6,8 @@ from httpx import AsyncClient, ASGITransport
 
 os.environ.setdefault("ANIMATORY_FAKE_EXECUTORS", "1")
 os.environ.setdefault("DB_PATH", ":memory:")
+# Keep existing single-pass parser tests deterministic; two-phase tests opt in.
+os.environ.setdefault("QWEN_TWO_PHASE", "0")
 
 from animatory.server import app  # noqa: E402 — env vars must be set first
 

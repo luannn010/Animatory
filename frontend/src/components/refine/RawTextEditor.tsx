@@ -12,9 +12,11 @@ interface Props {
   parsing: boolean
   parseProgress: { done: number; total: number } | null
   corrections: TextCorrection[]
+  spellchecking: boolean
   onChange: (next: string) => void
   onAcceptCorrection: (c: TextCorrection) => void
   onRejectCorrection: (c: TextCorrection) => void
+  onSpellcheck: () => void
   onSave: () => void
   onReset: () => void
   onParse: () => void
@@ -23,7 +25,8 @@ interface Props {
 export function RawTextEditor(props: Props) {
   const {
     text, edited, dirty, saving, parsed, parsing, parseProgress,
-    corrections, onAcceptCorrection, onRejectCorrection, onChange, onSave, onReset, onParse,
+    corrections, spellchecking, onAcceptCorrection, onRejectCorrection, onSpellcheck,
+    onChange, onSave, onReset, onParse,
   } = props
   const [editing, setEditing] = useState(false)
 
@@ -65,6 +68,11 @@ export function RawTextEditor(props: Props) {
             return (
               <div key={i} className="flex items-start gap-3 rounded-md border border-hairline bg-surface px-3 py-2 text-xs">
                 <div className="flex-1">
+                  {c.category && (
+                    <span className="mr-2 inline-block rounded-full border border-hairline px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone align-middle">
+                      {c.category}
+                    </span>
+                  )}
                   <span className="line-through text-stone">{c.find}</span>
                   <span className="mx-1.5 text-stone">→</span>
                   <span className="text-ink font-medium">{c.replace}</span>
@@ -94,6 +102,13 @@ export function RawTextEditor(props: Props) {
       )}
 
       <div className="flex items-center justify-end gap-2.5 mt-3">
+        <button
+          onClick={onSpellcheck}
+          disabled={spellchecking || parsing || !text.trim()}
+          className="mr-auto px-3 py-1.5 rounded-md border border-hairline text-steel text-xs hover:bg-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] transition-colors"
+        >
+          {spellchecking ? 'Checking…' : 'Spell check'}
+        </button>
         {edited && (
           <button
             onClick={onReset}

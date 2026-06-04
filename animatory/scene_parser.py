@@ -48,14 +48,32 @@ Return ONLY valid JSON matching this schema - no explanation, no markdown:
 }}
 
 Rules:
-- "dialogue" holds ONLY lines spoken aloud by a named character. Choose "emotion"
-  from the listed set (omit it if genuinely unclear); "intensity" is optional.
-- "narration" is narrator / voice-over prose NOT spoken by any character
-  (descriptions, scene-setting). Detect it and put each narration sentence as a
-  string in "narration". Do NOT invent a "Narrator" character.
+- SPEAKER ATTRIBUTION IS THE #1 PRIORITY. Assign every dialogue line to the
+  character who actually says it:
+  * Use the speech tag next to the quote — it may come BEFORE or AFTER the line:
+    "X nói / đáp / hỏi / mắng / quát / hét / gầm lên / lạnh giọng / cười nói".
+  * In a back-and-forth, speakers ALTERNATE. Do NOT assign several consecutive
+    different lines to the same character unless the text explicitly says so.
+  * Resolve titles / epithets to the actual person, e.g. "bản quan / ngự sử
+    đương triều / lão già" (the lecturing official) → the censor character;
+    "tiểu công gia / thiếu gia" → the young noble; "giáo úy / tuần phòng" → the
+    patrol officer (a DISTINCT speaker). Reply to an insult is the OTHER party.
+  * NEVER default to repeating one name for everything. If a line's speaker is
+    genuinely unidentifiable, set "character" to "Unknown" — do not reuse a name
+    that happens to appear nearby.
+- "dialogue" = ONLY words spoken ALOUD. These are NOT dialogue — put them in
+  "narration" (or "action"), never as a spoken line with a character:
+  * crowd / action beats: "Cả đám lập tức vây quanh hắn", "hắn bị đánh tơi tả"
+  * sound cues / description: "một giọng cười lạnh vang lên"
+  * inner thoughts: "trong lòng nghĩ / mắng thầm", "thầm nghĩ", "tự nhủ",
+    "nghĩ bụng" — the character does NOT say these out loud.
+- Choose "emotion" from the listed set (omit if genuinely unclear); "intensity"
+  is optional.
 - Known names — use EXACTLY these spellings wherever they appear:
   characters: {known_characters}
   locations: {known_locations}
+- A long argument with several speakers should usually be split into multiple
+  scenes/beats rather than one giant scene — this keeps attribution accurate.
 
 Chapter text:
 ---
@@ -85,8 +103,17 @@ matching this schema, keeping the SAME "scene_id":
 }}
 
 Rules:
-- "dialogue" holds ONLY lines spoken aloud by a named character; "narration" is
-  narrator / voice-over prose. Do NOT invent a "Narrator" character.
+- SPEAKER ATTRIBUTION IS THE #1 FIX. Re-derive each line's speaker from its
+  speech tag (before OR after the quote: "X nói/đáp/mắng/quát/hét/lạnh giọng").
+  In an exchange speakers ALTERNATE — do NOT attribute consecutive different
+  lines to the same character. A reply to an insult/accusation is the OTHER
+  party, not the accuser. Resolve epithets: "bản quan / ngự sử / lão già" → the
+  censor; "tiểu công gia / thiếu gia" → the young noble; "giáo úy / tuần phòng"
+  → the patrol officer (a distinct speaker). If truly unknown, use "Unknown" —
+  never collapse everything onto one name.
+- "dialogue" holds ONLY words spoken ALOUD. Crowd/action beats, sound cues, and
+  inner thoughts ("trong lòng nghĩ/mắng thầm", "thầm nghĩ", "tự nhủ") are NOT
+  dialogue → move them to "narration". Do NOT invent a "Narrator" character.
 - Choose "emotion" from the listed set (omit if unclear); "intensity" is optional.
 - Known names — use EXACTLY these spellings:
   characters: {known_characters}
@@ -99,6 +126,117 @@ part of the chapter):
 Chapter text:
 ---
 {chunk_text}
+---"""
+
+
+# ── two-phase (segment → extract) templates ──────────────────────────────────
+
+_SEGMENT_TEMPLATE = """\
+You are a Vietnamese novel-to-animation production assistant.
+Split the chapter text below into consecutive SCENES. A scene is one continuous
+beat (same location / time / participants). A long multi-speaker argument should
+be split into SEVERAL scenes.
+
+Return ONLY valid JSON - no explanation, no markdown:
+
+{{
+  "segments": [
+    {{
+      "scene_id": "{chunk_id}_S01",
+      "location": "string",
+      "characters": ["string"],
+      "start_anchor": "first 6-10 words of the scene, copied VERBATIM",
+      "end_anchor": "last 6-10 words of the scene, copied VERBATIM"
+    }}
+  ]
+}}
+
+Rules:
+- Segments are CONSECUTIVE and cover the WHOLE text in order (no gaps/overlaps).
+- Anchors MUST be exact substrings copied from the text — do NOT paraphrase or
+  translate. They are used to locate the scene in the raw text.
+- Number scene_id sequentially: {chunk_id}_S01, {chunk_id}_S02, ...
+- Known names — use EXACTLY these spellings:
+  characters: {known_characters}
+  locations: {known_locations}
+
+Chapter text:
+---
+{chunk_text}
+---"""
+
+_SCENE_EXTRACT_TEMPLATE = """\
+You are a Vietnamese novel-to-animation production assistant.
+Extract ONE scene from the scene text below. Return ONLY one JSON object (NOT an
+array, no markdown), keeping the given "scene_id":
+
+{{
+  "scene_id": "{scene_id}",
+  "location": "string",
+  "characters": ["string"],
+  "shot_type": "wide | medium | close-up | insert | POV",
+  "action": "string",
+  "dialogue": [
+    {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
+  ],
+  "narration": ["string"],
+  "mood": "string"
+}}
+
+Rules:
+- SPEAKER ATTRIBUTION is the priority: use speech tags (before OR after the
+  quote: "X nói/đáp/mắng/quát/hét/lạnh giọng"); speakers ALTERNATE in an
+  exchange; a reply to an accusation is the OTHER party. Resolve epithets
+  ("bản quan / ngự sử / lão già" -> the censor; "tiểu công gia / thiếu gia" ->
+  the young noble; "giáo úy / tuần phòng" -> the patrol officer). If a speaker
+  is unidentifiable use "Unknown" — never collapse everyone onto one name.
+- "dialogue" = ONLY words spoken ALOUD. Crowd/action beats, sound cues, and
+  inner thoughts ("trong lòng nghĩ/mắng thầm", "thầm nghĩ", "tự nhủ") go in
+  "narration", never as a spoken line.
+- Choose "emotion" from the listed set (omit if unclear); "intensity" optional.
+- Hint for this scene — location: {hint_location}; characters: {hint_characters}.
+- Known names — use EXACTLY these spellings:
+  characters: {known_characters}
+  locations: {known_locations}
+
+Scene text:
+---
+{scene_text}
+---"""
+
+_SPELLCHECK_TEMPLATE = """\
+You are a Vietnamese proofreader for a novel-to-animation script.
+Find SPELLING / TYPO errors in the chapter text below and propose corrections.
+Cover all of: character names, place/location names, ordinary words, and dialogue.
+
+Return ONLY valid JSON - no explanation, no markdown:
+
+{{
+  "corrections": [
+    {{
+      "find": "exact wrong substring copied VERBATIM from the text",
+      "replace": "corrected text",
+      "category": "name | location | word | dialogue",
+      "rationale": "short reason",
+      "all_occurrences": true
+    }}
+  ]
+}}
+
+Rules:
+- "find" MUST be an exact substring of the text (so it can be replaced literally).
+  Keep it short — just the wrong word/phrase, NOT a whole sentence.
+- Report ONLY real errors: typos, wrong/missing diacritics, mis-spelled or
+  INCONSISTENT names/locations. Do NOT rewrite style, grammar, or meaning.
+- Prefer the canonical spelling for known names/locations:
+  characters: {known_characters}
+  locations: {known_locations}
+- Set "all_occurrences" true when the same fix should apply everywhere in the text.
+- If there are no errors, return {{"corrections": []}}.
+
+Chapter text:
+---
+{text}
 ---"""
 
 
@@ -180,6 +318,163 @@ async def _call_qwen(
     ) from last_exc
 
 
+async def spellcheck_text(
+    text: str,
+    known: dict,
+    *,
+    qwen_endpoint: str | None = None,
+    model: str | None = None,
+    max_retries: int | None = None,
+) -> list[dict]:
+    """Proofread the chapter text and return find/replace correction suggestions.
+
+    Each suggestion: {find, replace, category, rationale, all_occurrences}.
+    Suggestions whose `find` is not an exact substring of `text` are dropped, so
+    every returned correction is applyable (never stale on arrival)."""
+    endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
+        qwen_endpoint, model, max_retries
+    )
+    prompt = _SPELLCHECK_TEMPLATE.format(
+        text=text,
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
+    logger.info("[spellcheck] chars=%d endpoint=%s model=%s", len(text), endpoint, model_name)
+    data = await _call_qwen(
+        prompt, label="spellcheck", endpoint=endpoint, model_name=model_name,
+        retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
+    )
+
+    raw = data.get("corrections", [])
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        find = c.get("find")
+        replace = c.get("replace")
+        if not find or find not in text or replace is None or replace == find:
+            continue  # must be an exact, applyable substring that actually changes something
+        key = (find, str(c.get("replace")))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "find": find,
+            "replace": c.get("replace", ""),
+            "category": c.get("category", "word"),
+            "rationale": c.get("rationale", ""),
+            "all_occurrences": bool(c.get("all_occurrences", False)),
+        })
+    return out
+
+
+def _main_prompt(chunk_id: str, chunk_text: str, known: dict) -> str:
+    return _PROMPT_TEMPLATE.format(
+        chunk_id=chunk_id,
+        chunk_text=chunk_text,
+        emotions=", ".join(EMOTIONS),
+        intensities=" | ".join(INTENSITIES),
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
+
+
+async def segment_chunk(chunk_id: str, chunk_text: str, known: dict, **qwen) -> list[dict]:
+    """Phase 1: ask the model only for scene boundaries (verbatim anchors)."""
+    prompt = _SEGMENT_TEMPLATE.format(
+        chunk_id=chunk_id,
+        chunk_text=chunk_text,
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
+    data = await _call_qwen(prompt, label=f"{chunk_id}/segment", **qwen)
+    segments = data.get("segments", [])
+    return segments if isinstance(segments, list) else []
+
+
+def _slice_by_anchors(text: str, segments: list[dict]) -> list[tuple[dict, str]]:
+    """Map each segment's verbatim start_anchor to an offset and cut the raw text
+    into consecutive, gap-free slices. Robust to anchors the model couldn't copy
+    exactly: such a segment falls back to continuing from the previous cursor."""
+    starts: list[int] = []
+    cursor = 0
+    for seg in segments:
+        anchor = (seg.get("start_anchor") or "").strip()
+        idx = text.find(anchor, cursor) if anchor else -1
+        if idx == -1 and anchor:
+            idx = text.find(anchor)  # search from the top
+        if idx == -1:
+            idx = cursor  # anchor not found — continue from where we are
+        starts.append(idx)
+        cursor = max(cursor, idx + 1)
+
+    out: list[tuple[dict, str]] = []
+    n = len(segments)
+    for i, seg in enumerate(segments):
+        start = starts[i]
+        end = starts[i + 1] if i + 1 < n else len(text)
+        if end <= start:
+            end = len(text) if i + 1 == n else start + 1
+        slice_text = text[start:end].strip()
+        if slice_text:
+            out.append((seg, slice_text))
+    return out
+
+
+async def _extract_one_scene(
+    scene_id: str, scene_text: str, seg: dict, known: dict, **qwen
+) -> dict | None:
+    """Phase 2: extract a single scene from its raw-text slice only."""
+    prompt = _SCENE_EXTRACT_TEMPLATE.format(
+        scene_id=scene_id,
+        scene_text=scene_text,
+        emotions=", ".join(EMOTIONS),
+        intensities=" | ".join(INTENSITIES),
+        hint_location=seg.get("location") or "?",
+        hint_characters=", ".join(seg.get("characters") or []) or "?",
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
+    try:
+        scene = await _call_qwen(prompt, label=scene_id, **qwen)
+    except ValueError:
+        logger.warning("[two_phase] scene %s extraction failed; skipping", scene_id)
+        return None
+    # Tolerate a model that wraps the object in {"scenes": [...]}.
+    if isinstance(scene, dict) and isinstance(scene.get("scenes"), list) and scene["scenes"]:
+        scene = scene["scenes"][0]
+    if not isinstance(scene, dict):
+        return None
+    scene["scene_id"] = scene_id
+    return scene
+
+
+async def _parse_chunk_two_phase(chunk_id: str, chunk_text: str, known: dict, **qwen) -> list[dict]:
+    """Segment the chunk, then extract each scene from its own raw-text slice.
+    Returns [] if segmentation produced nothing (caller falls back to single-pass)."""
+    segments = await segment_chunk(chunk_id, chunk_text, known, **qwen)
+    pairs = _slice_by_anchors(chunk_text, segments)
+    logger.info("[two_phase] chunk=%s segmented into %d scene(s)", chunk_id, len(pairs))
+    if not pairs:
+        return []
+
+    concurrency = max(1, int(os.environ.get("QWEN_PARSE_CONCURRENCY", "1")))
+    sem = asyncio.Semaphore(concurrency)
+
+    async def worker(idx: int, seg: dict, slice_text: str) -> dict | None:
+        scene_id = f"{chunk_id}_S{idx:02d}"
+        async with sem:
+            return await _extract_one_scene(scene_id, slice_text, seg, known, **qwen)
+
+    results = await asyncio.gather(
+        *(worker(i + 1, seg, txt) for i, (seg, txt) in enumerate(pairs))
+    )
+    return [s for s in results if s]
+
+
 async def parse_chunk(
     chunk_id: str,
     chunk_text: str,
@@ -193,29 +488,28 @@ async def parse_chunk(
     endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
         qwen_endpoint, model, max_retries
     )
+    qwen = dict(
+        endpoint=endpoint, model_name=model_name, retries=retries,
+        timeout_s=timeout_s, enable_thinking=enable_thinking,
+    )
 
     registry = entity_registry.load(episode_id, output_dir)
     known = registry.known_names()
-    prompt = _PROMPT_TEMPLATE.format(
-        chunk_id=chunk_id,
-        chunk_text=chunk_text,
-        emotions=", ".join(EMOTIONS),
-        intensities=" | ".join(INTENSITIES),
-        known_characters=", ".join(known["characters"]) or "(none yet)",
-        known_locations=", ".join(known["locations"]) or "(none yet)",
-    )
+    two_phase = os.environ.get("QWEN_TWO_PHASE", "0") == "1"
 
     logger.info(
-        "[parse_chunk] chunk=%s episode=%s endpoint=%s model=%s chars=%d retries=%d timeout=%.0fs thinking=%s",
-        chunk_id, episode_id, endpoint, model_name, len(chunk_text), retries, timeout_s, enable_thinking,
+        "[parse_chunk] chunk=%s episode=%s endpoint=%s model=%s chars=%d retries=%d timeout=%.0fs thinking=%s two_phase=%s",
+        chunk_id, episode_id, endpoint, model_name, len(chunk_text), retries, timeout_s, enable_thinking, two_phase,
     )
 
-    scenes_data = await _call_qwen(
-        prompt, label=chunk_id, endpoint=endpoint, model_name=model_name,
-        retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
-    )
+    raw_scenes: list[dict] = []
+    if two_phase:
+        raw_scenes = await _parse_chunk_two_phase(chunk_id, chunk_text, known, **qwen)
+    if not raw_scenes:
+        # Single-pass (default, and fallback if segmentation yields nothing).
+        scenes_data = await _call_qwen(_main_prompt(chunk_id, chunk_text, known), label=chunk_id, **qwen)
+        raw_scenes = scenes_data.get("scenes", [])
 
-    raw_scenes = scenes_data.get("scenes", [])
     scenes = [registry.normalize_scene(s) for s in raw_scenes]
     registry.learn(scenes)
     entity_registry.save(

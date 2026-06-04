@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
-from animatory.scene_parser import parse_chunk, parse_episode
+from animatory.scene_parser import parse_chunk, parse_episode, _slice_by_anchors
 
 FAKE_SCENES_RESPONSE = {
     "chunk_id": "C001",
@@ -302,3 +302,98 @@ async def test_reparse_scene_prompt_has_anchor_and_known_names():
     assert "Tư An" in prompt
     assert "the full chapter body" in prompt
     assert "commanding" in prompt
+
+
+# ── two-phase (segment → extract) ────────────────────────────────────────────
+
+def test_slice_by_anchors_cuts_consecutive_slices():
+    text = "Alpha beta gamma. Delta epsilon zeta. Eta theta iota."
+    segments = [
+        {"start_anchor": "Alpha beta"},
+        {"start_anchor": "Delta epsilon"},
+        {"start_anchor": "Eta theta"},
+    ]
+    slices = [s for _, s in _slice_by_anchors(text, segments)]
+    assert len(slices) == 3
+    assert slices[0].startswith("Alpha beta") and "gamma" in slices[0]
+    assert slices[1].startswith("Delta epsilon") and "zeta" in slices[1]
+    assert slices[2].startswith("Eta theta") and "iota" in slices[2]
+
+
+def test_slice_by_anchors_tolerates_missing_anchor():
+    text = "One two three four five six."
+    segments = [{"start_anchor": "One two"}, {"start_anchor": "NOT IN TEXT"}]
+    # Must not raise; still returns usable slices.
+    pairs = _slice_by_anchors(text, segments)
+    assert pairs and all(s for _, s in pairs)
+
+
+def _scene_obj(scene_id, who):
+    return {
+        "scene_id": scene_id, "location": "L", "characters": [who],
+        "shot_type": "wide", "action": "x",
+        "dialogue": [{"character": who, "line": "hi", "emotion": "neutral"}],
+        "narration": [], "mood": "m",
+    }
+
+
+@pytest.mark.asyncio
+async def test_two_phase_parse(tmp_path, monkeypatch):
+    monkeypatch.setenv("QWEN_TWO_PHASE", "1")
+    SEG = {"segments": [
+        {"scene_id": "C001_S01", "location": "Quán", "characters": ["A"], "start_anchor": "Alpha mo dau"},
+        {"scene_id": "C001_S02", "location": "Pho", "characters": ["B"], "start_anchor": "Bravo tiep theo"},
+    ]}
+    calls = []
+
+    async def fake_call(prompt, *, label, **kw):
+        calls.append(label)
+        if label.endswith("/segment"):
+            return SEG
+        return _scene_obj(label, "A" if label.endswith("S01") else "B")
+
+    text = "Alpha mo dau canh mot. Bravo tiep theo canh hai."
+    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
+        out = await parse_chunk("C001", text, "ep", tmp_path)
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert [s["scene_id"] for s in data["scenes"]] == ["C001_S01", "C001_S02"]
+    assert sum(1 for c in calls if c.endswith("/segment")) == 1   # one segment call
+    assert sum(1 for c in calls if not c.endswith("/segment")) == 2  # one extract per scene
+
+
+@pytest.mark.asyncio
+async def test_two_phase_falls_back_to_single_pass(tmp_path, monkeypatch):
+    monkeypatch.setenv("QWEN_TWO_PHASE", "1")
+
+    async def fake_call(prompt, *, label, **kw):
+        if label.endswith("/segment"):
+            return {"segments": []}            # segmentation yields nothing
+        return {"scenes": [_scene_obj("C001_S01", "A")]}  # single-pass shape
+
+    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
+        out = await parse_chunk("C001", "some text", "ep", tmp_path)
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert len(data["scenes"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_spellcheck_text_filters_non_substrings(tmp_path):
+    from animatory.scene_parser import spellcheck_text
+
+    async def fake_call(prompt, *, label, **kw):
+        return {"corrections": [
+            {"find": "mườ", "replace": "mười", "category": "word", "rationale": "typo", "all_occurrences": True},
+            {"find": "NOT IN TEXT", "replace": "x", "category": "word"},  # must be dropped
+            {"find": "", "replace": "y"},                                  # empty -> dropped
+            {"find": "lần", "replace": "lần", "category": "word"},         # no-op (find==replace) -> dropped
+        ]}
+
+    text = "thông minh gấp mườ lần"
+    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
+        out = await spellcheck_text(text, {"characters": [], "locations": []})
+
+    assert len(out) == 1
+    assert out[0]["find"] == "mườ" and out[0]["replace"] == "mười"
+    assert out[0]["category"] == "word" and out[0]["all_occurrences"] is True

@@ -1,9 +1,0 @@
-{
-  "rigs": "rigs/char_a.rig",
-  "animatic": "fixtures/animatic.mp4",
-  "mouth_charts": "fixtures/mouth_charts/",
-  "dialogue": "fixtures/dialogue/char_a.wav",
-  "episode_id": "ep001",
-  "phase": "production",
-  "track": "animation"
-}
