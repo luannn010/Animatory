@@ -85,6 +85,32 @@ class EntityRegistry:
             ]
         return scene
 
+    def learn(self, scenes: list[dict]) -> "EntityRegistry":
+        """Add genuinely-new character/location names to the registry. A name is
+        new only if its key matches no existing canonical or alias. Idempotent."""
+        char_keys = {_key(e["canonical"]) for e in self.characters}
+        char_keys |= {_key(a) for e in self.characters for a in e.get("aliases", [])}
+        loc_keys = {_key(e["canonical"]) for e in self.locations}
+        loc_keys |= {_key(a) for e in self.locations for a in e.get("aliases", [])}
+
+        def add(name: str, entries: list[dict], keys: set[str]) -> None:
+            if not isinstance(name, str) or not name.strip():
+                return
+            k = _key(name)
+            if k in keys:
+                return
+            entries.append({"canonical": name.strip(), "aliases": []})
+            keys.add(k)
+
+        for s in scenes:
+            add(s.get("location", ""), self.locations, loc_keys)
+            for c in s.get("characters", []) or []:
+                add(c, self.characters, char_keys)
+            for d in s.get("dialogue", []) or []:
+                if isinstance(d, dict):
+                    add(d.get("character", ""), self.characters, char_keys)
+        return self
+
 
 def _path(episode_dir: Path) -> Path:
     return episode_dir / "entities.json"

@@ -80,3 +80,39 @@ def test_normalize_scene_does_not_mutate_input():
     scene = {"location": "cao palace", "characters": [], "dialogue": []}
     _reg().normalize_scene(scene)
     assert scene["location"] == "cao palace"
+
+
+def test_learn_adds_new_names_only():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Tư An", "aliases": ["tu an"]}],
+    )
+    scenes = [
+        {
+            "location": "Garden",
+            "characters": ["Tư An", "Lan Nhi"],   # Tư An known; Lan Nhi new
+            "dialogue": [{"character": "tu an", "line": "x"},   # alias → known
+                         {"character": "Bà Mối", "line": "y"}], # new via dialogue
+        }
+    ]
+    reg.learn(scenes)
+    char_canon = {e["canonical"] for e in reg.characters}
+    loc_canon = {e["canonical"] for e in reg.locations}
+    assert char_canon == {"Tư An", "Lan Nhi", "Bà Mối"}
+    assert loc_canon == {"Garden"}
+
+
+def test_learn_is_idempotent():
+    reg = er.EntityRegistry(episode_id="ep1")
+    scenes = [{"location": "Hall", "characters": ["A"], "dialogue": []}]
+    reg.learn(scenes)
+    reg.learn(scenes)
+    assert len(reg.characters) == 1
+    assert len(reg.locations) == 1
+
+
+def test_learn_ignores_blank_names():
+    reg = er.EntityRegistry(episode_id="ep1")
+    reg.learn([{"location": "", "characters": ["", "  "], "dialogue": []}])
+    assert reg.characters == []
+    assert reg.locations == []
