@@ -266,3 +266,13 @@ export async function getVoiceProfiles(episodeId: string): Promise<VoiceProfiles
   return jsonOrThrow<VoiceProfilesResult>(res, 'getVoiceProfiles')
 }
 
+export async function reparseScene(
+  episodeId: string, chunkId: string, sceneId: string,
+): Promise<{ scene: PipelineScene }> {
+  const res = await fetch(
+    `${chunkBase(episodeId, chunkId)}/scenes/${encodeURIComponent(sceneId)}/reparse`,
+    { method: 'POST' },
+  )
+  return jsonOrThrow<{ scene: PipelineScene }>(res, 'reparseScene')
+}
+

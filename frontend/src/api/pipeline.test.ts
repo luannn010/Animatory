@@ -1,6 +1,6 @@
 // frontend/src/api/pipeline.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, EMOTIONS } from './pipeline'
+import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, EMOTIONS, reparseScene } from './pipeline'
 
 function mockFetch(body: unknown, ok = true, status = 200) {
   return vi.fn().mockResolvedValue({
@@ -61,5 +61,22 @@ describe('parse-enrichment clients', () => {
     const res = await getVoiceProfiles('ep1')
     expect(res.profiles[0].character).toBe('A')
     expect(f.mock.calls[0][0]).toContain('/pipeline/episodes/ep1/voice-profiles')
+  })
+})
+
+describe('reparseScene client', () => {
+  it('POSTs to the scene reparse route and returns the scene', async () => {
+    const f = mockFetch({ scene: { scene_id: 'C001_S01', location: 'L', characters: [], shot_type: 'wide', action: 'new', dialogue: [], mood: 'm', narration: [] } })
+    vi.stubGlobal('fetch', f)
+    const { scene } = await reparseScene('ep1', 'C001', 'C001_S01')
+    expect(scene.action).toBe('new')
+    const [url, init] = f.mock.calls[0]
+    expect(url).toContain('/pipeline/episodes/ep1/chunks/C001/scenes/C001_S01/reparse')
+    expect(init.method).toBe('POST')
+  })
+
+  it('throws on non-ok', async () => {
+    vi.stubGlobal('fetch', mockFetch({ detail: 'nope' }, false, 404))
+    await expect(reparseScene('ep1', 'C001', 'X')).rejects.toThrow(/404/)
   })
 })
