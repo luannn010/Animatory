@@ -65,6 +65,18 @@ def _scenes_payload(ep_dir: Path, chunk_id: str) -> dict | None:
     return doc
 
 
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+async def _owned_session(request: Request, episode_id: str, chunk_id: str, session_id: str) -> dict:
+    """Fetch a session and verify it belongs to this episode+chunk, else 404."""
+    sess = await request.app.state.chat_store.get_session(session_id)
+    if sess is None or sess["episode_id"] != episode_id or sess["chunk_id"] != chunk_id:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    return sess
+
+
 def _episode_status(ep_dir: Path) -> dict:
     manifest_path = ep_dir / "manifest.json"
     if not manifest_path.exists():
@@ -170,6 +182,10 @@ class ChatStreamRequest(BaseModel):
     messages: list[ChatTurnMessage]
     thinking: bool = False
     mentions: ChatMentions = ChatMentions()
+
+
+class RenameSessionRequest(BaseModel):
+    title: str
 
 
 @router.post("/parse/{episode_id}")
@@ -418,3 +434,40 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest):
             yield {"event": ev["event"], "data": json.dumps(ev["data"], ensure_ascii=False)}
 
     return EventSourceResponse(gen())
+
+
+@router.get("/episodes/{episode_id}/chunks/{chunk_id}/chat/sessions")
+async def list_chat_sessions(episode_id: str, chunk_id: str, request: Request):
+    _chunk_meta(_processed_dir() / episode_id, chunk_id)
+    return await request.app.state.chat_store.list_sessions(episode_id, chunk_id)
+
+
+@router.post("/episodes/{episode_id}/chunks/{chunk_id}/chat/sessions")
+async def create_chat_session(episode_id: str, chunk_id: str, request: Request):
+    _chunk_meta(_processed_dir() / episode_id, chunk_id)
+    return await request.app.state.chat_store.create_session(episode_id, chunk_id, now=_now())
+
+
+@router.get("/episodes/{episode_id}/chunks/{chunk_id}/chat/sessions/{session_id}")
+async def get_chat_session(episode_id: str, chunk_id: str, session_id: str, request: Request):
+    _chunk_meta(_processed_dir() / episode_id, chunk_id)
+    sess = await _owned_session(request, episode_id, chunk_id, session_id)
+    messages = await request.app.state.chat_store.get_messages(session_id)
+    return {"session": sess, "messages": messages}
+
+
+@router.patch("/episodes/{episode_id}/chunks/{chunk_id}/chat/sessions/{session_id}")
+async def rename_chat_session(episode_id: str, chunk_id: str, session_id: str,
+                              body: RenameSessionRequest, request: Request):
+    _chunk_meta(_processed_dir() / episode_id, chunk_id)
+    await _owned_session(request, episode_id, chunk_id, session_id)
+    await request.app.state.chat_store.set_title(session_id, body.title, now=_now())
+    return await request.app.state.chat_store.get_session(session_id)
+
+
+@router.delete("/episodes/{episode_id}/chunks/{chunk_id}/chat/sessions/{session_id}")
+async def delete_chat_session(episode_id: str, chunk_id: str, session_id: str, request: Request):
+    _chunk_meta(_processed_dir() / episode_id, chunk_id)
+    await _owned_session(request, episode_id, chunk_id, session_id)
+    await request.app.state.chat_store.delete_session(session_id)
+    return {"ok": True}

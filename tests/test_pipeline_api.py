@@ -380,3 +380,33 @@ async def test_chat_store_wired_into_app(client: AsyncClient):
     from animatory.server import app
     assert hasattr(app.state, "chat_store")
     assert app.state.chat_store is not None
+
+
+@pytest.mark.asyncio
+async def test_session_crud(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "cs1")
+    base = f"/pipeline/episodes/cs1/chunks/{cid}/chat/sessions"
+
+    created = (await client.post(base)).json()
+    sid = created["session_id"]
+    assert created["title"] is None and created["message_count"] == 0
+
+    listed = (await client.get(base)).json()
+    assert any(s["session_id"] == sid for s in listed)
+
+    got = (await client.get(f"{base}/{sid}")).json()
+    assert got["session"]["session_id"] == sid
+    assert got["messages"] == []
+
+    renamed = (await client.patch(f"{base}/{sid}", json={"title": "Renamed"})).json()
+    assert renamed["title"] == "Renamed"
+
+    assert (await client.delete(f"{base}/{sid}")).status_code == 200
+    assert (await client.get(f"{base}/{sid}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_session_get_unknown_404(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "cs2")
+    r = await client.get(f"/pipeline/episodes/cs2/chunks/{cid}/chat/sessions/does-not-exist")
+    assert r.status_code == 404
