@@ -66,10 +66,26 @@ function SceneCardItem({ scene }: { scene: PipelineScene }) {
           {scene.dialogue.map((d, i) => (
             <div key={i} className="flex gap-2 text-xs leading-snug">
               <dt className="font-medium text-steel shrink-0">{d.character}</dt>
-              <dd className="text-ink">{d.line}</dd>
+              <dd className="text-ink">
+                {d.line}
+                {d.emotion && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-xs text-[10px] bg-surface text-steel border border-hairline align-middle">
+                    {d.emotion}{d.intensity ? ` · ${d.intensity}` : ''}
+                  </span>
+                )}
+              </dd>
             </div>
           ))}
         </dl>
+      )}
+
+      {scene.narration && scene.narration.length > 0 && (
+        <div className="mt-2.5 border-t border-hairline pt-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-stone mb-1">Narration</div>
+          <ul className="space-y-1 text-xs text-steel italic leading-snug">
+            {scene.narration.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   )

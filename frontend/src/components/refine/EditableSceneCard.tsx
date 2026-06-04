@@ -1,6 +1,7 @@
 // frontend/src/components/refine/EditableSceneCard.tsx
 import { useState } from 'react'
 import type { PipelineScene, ScenePatch } from '../../api/pipeline'
+import { EMOTIONS, INTENSITIES } from '../../api/pipeline'
 
 const SHOT_TYPES = ['wide', 'medium', 'close-up', 'insert', 'POV']
 
@@ -62,10 +63,26 @@ export function EditableSceneCard({
           {scene.dialogue.map((d, i) => (
             <div key={i} className="flex gap-2 text-xs leading-snug">
               <dt className="font-medium text-steel shrink-0">{d.character}</dt>
-              <dd className="text-ink">{d.line}</dd>
+              <dd className="text-ink">
+                {d.line}
+                {d.emotion && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-xs text-[10px] bg-surface text-steel border border-hairline align-middle">
+                    {d.emotion}{d.intensity ? ` · ${d.intensity}` : ''}
+                  </span>
+                )}
+              </dd>
             </div>
           ))}
         </dl>
+      )}
+
+      {scene.narration && scene.narration.length > 0 && (
+        <div className="mt-2.5 border-t border-hairline pt-2.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-stone mb-1">Narration</div>
+          <ul className="space-y-1 text-xs text-steel italic leading-snug">
+            {scene.narration.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        </div>
       )}
 
       {proposal && (
@@ -122,20 +139,36 @@ function EditForm({ scene, onCancel, onSave }: {
 
       <div className="space-y-1.5">
         {draft.dialogue.map((d, i) => (
-          <div key={i} className="flex gap-1.5">
-            <input className={field + ' w-1/3'} value={d.character} onChange={e => {
-              const dl = [...draft.dialogue]; dl[i] = { ...dl[i], character: e.target.value }; set({ dialogue: dl })
-            }} placeholder="Character" />
-            <input className={field} value={d.line} onChange={e => {
-              const dl = [...draft.dialogue]; dl[i] = { ...dl[i], line: e.target.value }; set({ dialogue: dl })
-            }} placeholder="Line" />
-            <button
-              onClick={() => set({ dialogue: draft.dialogue.filter((_, j) => j !== i) })}
-              className="text-stone hover:text-brand-error px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] rounded transition-colors"
-              aria-label="Remove line"
-            >
-              ×
-            </button>
+          <div key={i} className="space-y-1">
+            <div className="flex gap-1.5">
+              <input className={field + ' w-1/3'} value={d.character} onChange={e => {
+                const dl = [...draft.dialogue]; dl[i] = { ...dl[i], character: e.target.value }; set({ dialogue: dl })
+              }} placeholder="Character" />
+              <input className={field} value={d.line} onChange={e => {
+                const dl = [...draft.dialogue]; dl[i] = { ...dl[i], line: e.target.value }; set({ dialogue: dl })
+              }} placeholder="Line" />
+              <button
+                onClick={() => set({ dialogue: draft.dialogue.filter((_, j) => j !== i) })}
+                className="text-stone hover:text-brand-error px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] rounded transition-colors"
+                aria-label="Remove line"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex gap-1.5 pl-[calc(33%+0.375rem)]">
+              <select className={field + ' w-1/2'} value={d.emotion ?? ''} onChange={e => {
+                const dl = [...draft.dialogue]; dl[i] = { ...dl[i], emotion: e.target.value || null }; set({ dialogue: dl })
+              }}>
+                <option value="">emotion…</option>
+                {EMOTIONS.map(em => <option key={em} value={em}>{em}</option>)}
+              </select>
+              <select className={field + ' w-1/2'} value={d.intensity ?? ''} onChange={e => {
+                const dl = [...draft.dialogue]; dl[i] = { ...dl[i], intensity: e.target.value || null }; set({ dialogue: dl })
+              }}>
+                <option value="">intensity…</option>
+                {INTENSITIES.map(it => <option key={it} value={it}>{it}</option>)}
+              </select>
+            </div>
           </div>
         ))}
         <button
@@ -143,6 +176,30 @@ function EditForm({ scene, onCancel, onSave }: {
           className="text-[11px] text-steel hover:text-ink transition-colors"
         >
           + Add dialogue line
+        </button>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-stone">Narration</div>
+        {(draft.narration ?? []).map((n, i) => (
+          <div key={i} className="flex gap-1.5">
+            <input className={field} value={n} onChange={e => {
+              const nr = [...(draft.narration ?? [])]; nr[i] = e.target.value; set({ narration: nr })
+            }} placeholder="Narration line" />
+            <button
+              onClick={() => set({ narration: (draft.narration ?? []).filter((_, j) => j !== i) })}
+              className="text-stone hover:text-brand-error px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] rounded transition-colors"
+              aria-label="Remove narration line"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => set({ narration: [...(draft.narration ?? []), ''] })}
+          className="text-[11px] text-steel hover:text-ink transition-colors"
+        >
+          + Add narration line
         </button>
       </div>
 
