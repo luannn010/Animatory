@@ -60,7 +60,7 @@ _KIND_BY_TOOL = {
 }
 
 
-def _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools) -> list[dict]:
+def _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools, scene_sources=None) -> list[dict]:
     system = _SYSTEM if use_tools else _SYSTEM + _FALLBACK_NOTE
     lines = ["Scenes in this chapter (id · location · characters):"]
     for s in scene_index:
@@ -69,6 +69,9 @@ def _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools
     ctx = "\n".join(lines)
     if mentioned_scenes:
         ctx += "\n\nFull detail for mentioned scene(s):\n" + json.dumps(mentioned_scenes, ensure_ascii=False)
+    for sid, excerpt in (scene_sources or {}).items():
+        if excerpt:
+            ctx += f"\n\nSource passage for {sid}:\n---\n{excerpt}\n---"
     if raw_text:
         ctx += f"\n\nRaw chapter text:\n---\n{raw_text}\n---"
     # Qwen's chat template allows only ONE system message and it must be first;
@@ -88,6 +91,7 @@ async def stream_chat(
     messages: list[dict],
     thinking: bool,
     *,
+    scene_sources: dict[str, str] | None = None,
     qwen_endpoint: str | None = None,
     model: str | None = None,
 ) -> AsyncIterator[dict]:
@@ -100,7 +104,7 @@ async def stream_chat(
 
     payload = {
         "model": model_name,
-        "messages": _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools),
+        "messages": _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools, scene_sources),
         "stream": True,
         "temperature": 0.3,
         "stream_options": {"include_usage": True},

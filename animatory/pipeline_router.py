@@ -519,7 +519,9 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
     ]
     wanted = set(body.mentions.scenes) & valid_ids
     mentioned = [s for s in all_scenes if s["scene_id"] in wanted]
-    raw_text = _text_payload(ep_dir, chunk_id, meta)["text"] if body.mentions.raw else None
+    chapter_text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    scene_sources = {s["scene_id"]: scene_source.locate(s, chapter_text)["excerpt"] for s in mentioned}
+    raw_text = chapter_text if body.mentions.raw else None
 
     prior = await store.get_messages(session_id)
     is_first = len(prior) == 0
@@ -537,6 +539,7 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
         async for ev in stream_chat(
             chunk_id=chunk_id, scene_index=scene_index, mentioned_scenes=mentioned,
             raw_text=raw_text, messages=history, thinking=body.thinking,
+            scene_sources=scene_sources,
         ):
             etype = ev["event"]
             if etype == "done":
