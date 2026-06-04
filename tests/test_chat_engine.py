@@ -127,3 +127,33 @@ async def test_stream_chat_fallback_parses_trailing_json(monkeypatch):
     assert tools[0]["data"]["kind"] == "scene_edits"
     assert tools[0]["data"]["payload"]["scene_id"] == "C001_S01"
     assert events[-1]["event"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_generate_title_uses_llm():
+    from animatory.chat_engine import generate_title
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {"choices": [{"message": {"content": '"Bedroom Standoff"'}}]}
+    with patch("animatory.chat_engine.httpx.AsyncClient") as MockClient:
+        inst = AsyncMock()
+        inst.__aenter__ = AsyncMock(return_value=inst)
+        inst.__aexit__ = AsyncMock(return_value=False)
+        inst.post = AsyncMock(return_value=resp)
+        MockClient.return_value = inst
+        title = await generate_title([{"role": "user", "content": "describe scene 1"}])
+    assert title == "Bedroom Standoff"  # quotes stripped
+
+
+@pytest.mark.asyncio
+async def test_generate_title_falls_back_on_error():
+    from animatory.chat_engine import generate_title
+    import httpx
+    with patch("animatory.chat_engine.httpx.AsyncClient") as MockClient:
+        inst = AsyncMock()
+        inst.__aenter__ = AsyncMock(return_value=inst)
+        inst.__aexit__ = AsyncMock(return_value=False)
+        inst.post = AsyncMock(side_effect=httpx.ConnectError("down"))
+        MockClient.return_value = inst
+        title = await generate_title([{"role": "user", "content": "Make the mood darker please and tighten dialogue everywhere"}])
+    assert title == "Make the mood darker please and tighten "  # first 40 chars of first user msg

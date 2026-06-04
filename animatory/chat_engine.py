@@ -174,6 +174,39 @@ async def stream_chat(
         yield {"event": "error", "data": {"detail": f"could not reach Qwen at {endpoint}: {exc}"}}
 
 
+async def generate_title(messages: list[dict], *, qwen_endpoint=None, model=None) -> str:
+    """Short LLM-generated session title; falls back to the first user message."""
+    first_user = next((m["content"] for m in messages if m.get("role") == "user"), "")
+    fallback = first_user.strip()[:40] or "New chat"
+
+    endpoint = (qwen_endpoint or os.environ.get("QWEN_ENDPOINT", "http://localhost:1090")).rstrip("/")
+    model_name = model or os.environ.get("QWEN_MODEL", "qwen3.5")
+    timeout_s = float(os.environ.get("QWEN_TIMEOUT_S", "120"))
+
+    transcript = "\n".join(f"{m['role']}: {m['content']}" for m in messages[:4])
+    prompt = (
+        "Give a concise 3-5 word title for this conversation. "
+        "Reply with ONLY the title — no quotes, no punctuation, no preamble.\n\n" + transcript
+    )
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            resp = await client.post(f"{endpoint}/v1/chat/completions", json=payload)
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"]
+        title = raw.strip().strip('"').strip("'").strip()
+        title = title.splitlines()[0].strip()[:60] if title else ""
+        return title or fallback
+    except (httpx.HTTPError, KeyError, json.JSONDecodeError, IndexError) as exc:
+        logger.warning("[chat] title generation failed -> %s; using fallback", repr(exc))
+        return fallback
+
+
 def _split_fallback(content: str) -> tuple[str, list[tuple[str, dict]]]:
     """Split a fallback reply into (visible_prose, [(kind, payload), ...])."""
     m = _FENCE_RE.search(content)
