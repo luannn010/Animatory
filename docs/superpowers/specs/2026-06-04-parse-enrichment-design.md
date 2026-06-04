@@ -90,11 +90,18 @@ later").
 | `load(episode_id) -> EntityRegistry` | Read `entities.json`; empty registry if absent. |
 | `save(registry)` | Write atomically; stamps `updated_at` (timestamp passed in / `_now()` injected, never `Date`-style nondeterminism in tests). |
 | `known_names() -> {characters: [...], locations: [...]}` | Canonical names (+ aliases) for prompt injection. |
-| `normalize_scene(scene) -> scene` | **Deterministic** alias→canonical replacement on **structured fields only**: `location`, `characters[]`, `dialogue[].character`. Case- and diacritic-insensitive match against canonical + aliases. Never edits free prose (`action`, `line`, `narration`). |
-| `learn(scenes) -> registry` | Add genuinely-new names (not matching any canonical/alias) as new canonical entries. Idempotent. |
+| `normalize_scene(scene) -> scene` | **Deterministic** alias→canonical replacement on **structured fields only**: `location`, `characters[]`, `dialogue[].character`. Case-insensitive (NFC) match against canonical + recorded aliases. Never edits free prose (`action`, `line`, `narration`). |
+| `learn(scenes) -> registry` | Add genuinely-new names (not matching any canonical/alias key) as new canonical entries. Idempotent. |
 
-Matching rule for `normalize_scene` / `learn`: compare on a normalized key
-(casefold + Unicode NFC + stripped) so `đại cản` matches alias of `Đại Càn`.
+Matching rule for `normalize_scene` / `learn`: compare on a normalized key —
+`unicodedata.normalize("NFC", name)` + `casefold()` + internal-whitespace
+collapse + strip. The key is **case-insensitive but diacritic-significant** on
+purpose: collapsing diacritics would wrongly merge distinct Vietnamese names
+(e.g. *má* vs *mà*). The `đại cản → Đại Càn` fix therefore works by the user
+**recording `đại cản` as an explicit alias** of `Đại Càn` (step 2 below); after
+that, the alias key matches every future occurrence regardless of case.
+(Diacritic-insensitive *duplicate suggestion* in the entity panel is a possible
+later nicety — out of scope for B.)
 
 ## 4. Correction Flow (đại cản → Đại Càn)
 
