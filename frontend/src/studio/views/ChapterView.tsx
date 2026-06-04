@@ -4,14 +4,17 @@ import { Link, useParams } from 'react-router-dom'
 import {
   getChunkScenes, getChunkText, parseEpisode,
   saveScenes, saveText, resetScenes, resetText,
-  type ChatMessage, type PipelineScene, type ScenePatch, type TextCorrection,
+  type PipelineScene, type ScenePatch, type TextCorrection,
 } from '../../api/pipeline'
-import { streamChat, type ChatMention, type ChatUsage } from '../../api/chat'
+import {
+  streamChat, listSessions, createSession, getSession, renameSession, deleteSession,
+  type ChatMention, type ChatUsage, type ChatSessionMeta,
+} from '../../api/chat'
+import { RefineChat, type ChatDisplayMessage } from '../../components/refine/RefineChat'
 import { api } from '../../api'
 import { applyCorrection } from '../../components/refine/corrections'
 import { RawTextEditor } from '../../components/refine/RawTextEditor'
 import { EditableSceneCard } from '../../components/refine/EditableSceneCard'
-import { RefineChat } from '../../components/refine/RefineChat'
 
 export function ChapterView() {
   const { id = '', episodeId = '', chunkId = '' } = useParams()
@@ -33,8 +36,10 @@ export function ChapterView() {
   const [proposals, setProposals] = useState<Record<string, ScenePatch>>({})
   const [savingScenes, setSavingScenes] = useState(false)
 
-  // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  // Chat state (server-authoritative sessions)
+  const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
+  const [sessions, setSessions] = useState<ChatSessionMeta[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [streamReply, setStreamReply] = useState('')
@@ -82,6 +87,23 @@ export function ChapterView() {
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
   }, [episodeId, chunkId, loadScenes])
+
+  // Resume the latest session for this chunk on open.
+  useEffect(() => {
+    let alive = true
+    listSessions(episodeId, chunkId).then(async list => {
+      if (!alive) return
+      setSessions(list)
+      if (list.length > 0) {
+        const { session, messages: stored } = await getSession(episodeId, chunkId, list[0].session_id)
+        if (!alive) return
+        setActiveSessionId(session.session_id)
+        setMessages(stored.map(m => ({ role: m.role, content: m.content, toolCount: m.tool_calls.length })))
+        setUsage({ prompt_tokens: session.token_count, total_tokens: session.token_count, context_limit: 32768, skipped_mentions: [] })
+      }
+    }).catch(() => { /* no sessions yet */ })
+    return () => { alive = false }
+  }, [episodeId, chunkId])
 
   // Close any in-flight parse stream on unmount.
   useEffect(() => () => { parseEsRef.current?.close() }, [])
@@ -167,28 +189,31 @@ export function ChapterView() {
     setScenes(s.scenes); setSceneBaseline(JSON.stringify(s.scenes)); setScenesEdited(s.edited); setProposals({})
   }
 
-  // --- Chat (streaming) ---
-  function runTurn(history: ChatMessage[], text: string, mentions: ChatMention) {
+  // --- Chat (streaming, server-authoritative) ---
+  async function refreshSessions() {
+    try { setSessions(await listSessions(episodeId, chunkId)) } catch { /* ignore */ }
+  }
+  function runTurn(text: string, mentions: ChatMention) {
     lastTurnRef.current = { text, mentions }
-    const next = [...history, { role: 'user' as const, content: text }]
-    setMessages(next)
+    setMessages(m => [...m, { role: 'user', content: text }])
     streamReplyRef.current = ''
     setStreaming(true); setChatError(''); setStreamReply(''); setStreamThinking(''); setSkipped(0)
     let reply = ''
+    let toolCount = 0
     const handle = streamChat(
       episodeId, chunkId,
-      { messages: next, thinking: thinkingEnabled, mentions },
+      { session_id: activeSessionId, message: text, thinking: thinkingEnabled, mentions },
       {
+        onSession: id => setActiveSessionId(id),
+        onTitle: () => { refreshSessions() },
         onThinking: d => setStreamThinking(t => t + d),
         onReply: d => { reply += d; streamReplyRef.current = reply; setStreamReply(reply) },
         onTool: (kind, payload) => {
+          toolCount += 1
           if (kind === 'scene_edits') {
             const p = payload as ScenePatch
-            if (scenes.some(s => s.scene_id === p.scene_id)) {
-              setProposals(prev => ({ ...prev, [p.scene_id]: p }))
-            } else {
-              setSkipped(n => n + 1)
-            }
+            if (scenes.some(s => s.scene_id === p.scene_id)) setProposals(prev => ({ ...prev, [p.scene_id]: p }))
+            else setSkipped(n => n + 1)
           } else {
             const { corrections: cs } = payload as { corrections: TextCorrection[] }
             setCorrections(cs ?? [])
@@ -197,17 +222,16 @@ export function ChapterView() {
         onUsage: u => setUsage(u),
         onDone: () => {
           setStreaming(false)
-          setMessages(m => reply ? [...m, { role: 'assistant', content: reply }] : m)
+          setMessages(m => reply ? [...m, { role: 'assistant', content: reply, toolCount }] : m)
           setStreamReply(''); setStreamThinking('')
+          refreshSessions()
         },
         onError: detail => { setStreaming(false); setChatError(detail) },
       },
     )
     chatAbortRef.current = handle
   }
-  function onSend(text: string, mentions: ChatMention) {
-    if (!streaming) runTurn(messages, text, mentions)
-  }
+  function onSend(text: string, mentions: ChatMention) { if (!streaming) runTurn(text, mentions) }
   function onAbortChat() {
     chatAbortRef.current?.abort()
     const partial = streamReplyRef.current
@@ -219,13 +243,38 @@ export function ChapterView() {
   function onRetryChat() {
     const last = lastTurnRef.current
     if (!last) return
-    const history = messages[messages.length - 1]?.role === 'user' ? messages.slice(0, -1) : messages
-    runTurn(history, last.text, last.mentions)
+    setMessages(m => m[m.length - 1]?.role === 'user' ? m.slice(0, -1) : m)
+    runTurn(last.text, last.mentions)
   }
-  function onNewChat() {
+  async function onNewChat() {
     chatAbortRef.current?.abort()
-    setMessages([]); setStreaming(false); setStreamReply(''); setStreamThinking('')
-    setChatError(''); setUsage(null)
+    setStreaming(false); setStreamReply(''); setStreamThinking(''); setChatError(''); setUsage(null)
+    const s = await createSession(episodeId, chunkId)
+    setActiveSessionId(s.session_id); setMessages([])
+    refreshSessions()
+  }
+  async function onSelectSession(sessionId: string) {
+    if (streaming) return
+    const { session, messages: stored } = await getSession(episodeId, chunkId, sessionId)
+    setActiveSessionId(session.session_id)
+    setMessages(stored.map(m => ({ role: m.role, content: m.content, toolCount: m.tool_calls.length })))
+    setUsage({ prompt_tokens: session.token_count, total_tokens: session.token_count, context_limit: 32768, skipped_mentions: [] })
+    setChatError('')
+  }
+  async function onRenameSession(sessionId: string, title: string) {
+    await renameSession(episodeId, chunkId, sessionId, title)
+    refreshSessions()
+  }
+  async function onDeleteSession(sessionId: string) {
+    await deleteSession(episodeId, chunkId, sessionId)
+    if (sessionId === activeSessionId) {
+      const list = await listSessions(episodeId, chunkId)
+      setSessions(list)
+      if (list.length > 0) onSelectSession(list[0].session_id)
+      else { setActiveSessionId(null); setMessages([]); setUsage(null) }
+    } else {
+      refreshSessions()
+    }
   }
 
   return (
@@ -324,11 +373,16 @@ export function ChapterView() {
             usage={usage}
             error={chatError}
             sceneIds={scenes.map(s => s.scene_id)}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
             onToggleThinking={() => setThinkingEnabled(v => !v)}
             onSend={onSend}
             onAbort={onAbortChat}
             onRetry={onRetryChat}
             onNewChat={onNewChat}
+            onSelectSession={onSelectSession}
+            onRenameSession={onRenameSession}
+            onDeleteSession={onDeleteSession}
           />
         </div>
       </div>
