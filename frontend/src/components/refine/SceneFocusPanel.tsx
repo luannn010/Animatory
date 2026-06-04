@@ -51,7 +51,7 @@ export function SceneFocusPanel({
 
         <button type="button" onClick={onClose} aria-label="Close"
           className="absolute top-3 right-3 text-stone hover:text-ink rounded-md px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] transition-colors">
-          ✕
+          ×
         </button>
 
         {/* Left column: scene + source */}
