@@ -14,10 +14,13 @@ interface Props {
   onSaveLocal: (next: PipelineScene) => void
   onAcceptProposal: () => void
   onRejectProposal: () => void
+  onReparse: () => void
+  reparsing: boolean
 }
 
 export function EditableSceneCard({
   scene, isEditing, proposal, onEdit, onCancel, onSaveLocal, onAcceptProposal, onRejectProposal,
+  onReparse, reparsing,
 }: Props) {
   if (isEditing) return <EditForm scene={scene} onCancel={onCancel} onSave={onSaveLocal} />
 
@@ -35,6 +38,13 @@ export function EditableSceneCard({
               {scene.shot_type}
             </span>
           )}
+          <button
+            onClick={onReparse}
+            disabled={reparsing}
+            className="text-[11px] text-steel hover:text-ink disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]"
+          >
+            {reparsing ? 'Re-parsing…' : 'Re-parse'}
+          </button>
           <button
             onClick={onEdit}
             className="text-[11px] text-steel hover:text-ink transition-colors"
