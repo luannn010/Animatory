@@ -47,15 +47,19 @@ export function SceneFocusPanel({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
       <div role="dialog" aria-modal="true" aria-label={sceneLabel(scene.scene_id)}
-        className="relative z-10 w-full max-w-5xl max-h-[85vh] grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 rounded-lg border border-hairline bg-canvas p-5 overflow-hidden">
+        className="relative z-10 flex flex-col w-full max-w-5xl max-h-[85vh] rounded-lg border border-hairline bg-canvas p-5 overflow-hidden">
 
         <button type="button" onClick={onClose} aria-label="Close"
-          className="absolute top-3 right-3 text-stone hover:text-ink rounded-md px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] transition-colors">
+          className="absolute top-3 right-3 z-10 text-stone hover:text-ink rounded-md px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] transition-colors">
           ×
         </button>
 
+        {/* Two-column body: bounded to the dialog height so each column scrolls
+            internally instead of the chapter text overflowing the whole screen. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] gap-4 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+
         {/* Left column: scene + source */}
-        <div className="min-h-0 overflow-y-auto pr-1 space-y-4">
+        <div className="min-h-0 lg:overflow-y-auto pr-1 space-y-4">
           <div>
             <div className="flex items-baseline justify-between gap-3 mb-2">
               <span className="font-mono text-[11px] uppercase tracking-wide text-stone">{sceneLabel(scene.scene_id)}</span>
@@ -112,8 +116,10 @@ export function SceneFocusPanel({
         </div>
 
         {/* Right column: the relocated chat */}
-        <div className="min-h-0 h-[60vh] lg:h-auto">
+        <div className="min-h-0 lg:overflow-hidden h-[60vh] lg:h-auto">
           {children}
+        </div>
+
         </div>
       </div>
     </div>
