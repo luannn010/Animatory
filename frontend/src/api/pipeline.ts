@@ -36,9 +36,17 @@ export interface EpisodeChunks {
   chunks: ChunkInfo[]
 }
 
+export const EMOTIONS = [
+  'neutral', 'happy', 'sad', 'angry', 'fearful', 'surprised',
+  'tender', 'mocking', 'commanding', 'anxious', 'determined', 'disgusted',
+] as const
+export const INTENSITIES = ['low', 'medium', 'high'] as const
+
 export interface SceneDialogue {
   character: string
   line: string
+  emotion?: string | null
+  intensity?: string | null
 }
 
 export interface PipelineScene {
@@ -49,6 +57,7 @@ export interface PipelineScene {
   action: string
   dialogue: SceneDialogue[]
   mood: string
+  narration?: string[]
 }
 
 export interface ChunkScenes {
@@ -204,5 +213,56 @@ export async function saveScenes(
 export async function resetScenes(episodeId: string, chunkId: string): Promise<ChunkScenes> {
   const res = await fetch(`${chunkBase(episodeId, chunkId)}/scenes/edited`, { method: 'DELETE' })
   return jsonOrThrow<ChunkScenes>(res, 'resetScenes')
+}
+
+export interface EntityEntry {
+  canonical: string
+  aliases: string[]
+}
+
+export interface EntityRegistry {
+  episode_id: string
+  updated_at: string | null
+  characters: EntityEntry[]
+  locations: EntityEntry[]
+}
+
+export interface VoiceProfile {
+  character: string
+  line_count: number
+  emotions: Record<string, number>
+  dominant_emotion: string | null
+  dominant_intensity: string | null
+}
+
+export interface VoiceProfilesResult {
+  episode_id: string
+  profiles: VoiceProfile[]
+}
+
+function episodeBase(episodeId: string): string {
+  return `${API_BASE_URL}/pipeline/episodes/${encodeURIComponent(episodeId)}`
+}
+
+export async function getEntities(episodeId: string): Promise<EntityRegistry> {
+  const res = await fetch(`${episodeBase(episodeId)}/entities`)
+  return jsonOrThrow<EntityRegistry>(res, 'getEntities')
+}
+
+export async function saveEntities(
+  episodeId: string,
+  body: { characters: EntityEntry[]; locations: EntityEntry[] },
+): Promise<EntityRegistry> {
+  const res = await fetch(`${episodeBase(episodeId)}/entities`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return jsonOrThrow<EntityRegistry>(res, 'saveEntities')
+}
+
+export async function getVoiceProfiles(episodeId: string): Promise<VoiceProfilesResult> {
+  const res = await fetch(`${episodeBase(episodeId)}/voice-profiles`)
+  return jsonOrThrow<VoiceProfilesResult>(res, 'getVoiceProfiles')
 }
 
