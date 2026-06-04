@@ -6,6 +6,10 @@ import { api } from '../api'
 
 interface Props {
   episodeId: string
+  /** Friendly transcript name shown in the card header (falls back to episodeId). */
+  title?: string
+  /** Bump to force a re-fetch of the chunk list (e.g. after a new chunk run). */
+  reloadKey?: number
 }
 
 /**
@@ -13,7 +17,7 @@ interface Props {
  * (with per-chunk parse status) and lets the user parse all or a selected subset.
  * Clicking a chunk navigates to its dedicated chapter page (raw text + scenes).
  */
-export function ParseChunks({ episodeId }: Props) {
+export function ParseChunks({ episodeId, title, reloadKey }: Props) {
   const { id: projectId = '' } = useParams()
   const navigate = useNavigate()
 
@@ -41,7 +45,7 @@ export function ParseChunks({ episodeId }: Props) {
 
   useEffect(() => {
     refresh()
-  }, [refresh])
+  }, [refresh, reloadKey])
 
   function openChapter(chunkId: string) {
     navigate(`/project/${projectId}/chapter/${encodeURIComponent(episodeId)}/${encodeURIComponent(chunkId)}`)
@@ -115,7 +119,7 @@ export function ParseChunks({ episodeId }: Props) {
     <div className="rounded-lg border border-hairline bg-canvas p-5 mb-6">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-ink">
-          Parse chunks <span className="text-steel font-normal">· {episodeId}</span>
+          Parse chunks <span className="text-steel font-normal">· {title || episodeId}</span>
         </h2>
         <button
           onClick={refresh}
