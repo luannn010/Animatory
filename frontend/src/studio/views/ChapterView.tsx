@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   getChunkScenes, getChunkText, parseEpisode,
-  saveScenes, saveText, resetScenes, resetText,
+  saveScenes, saveText, resetScenes, resetText, reparseScene,
   type PipelineScene, type ScenePatch, type TextCorrection,
 } from '../../api/pipeline'
 import {
@@ -37,6 +37,8 @@ export function ChapterView() {
   const [editing, setEditing] = useState<Set<string>>(new Set())
   const [proposals, setProposals] = useState<Record<string, ScenePatch>>({})
   const [savingScenes, setSavingScenes] = useState(false)
+  const [reparsing, setReparsing] = useState<Set<string>>(new Set())
+  const [reparseError, setReparseError] = useState('')
 
   // Chat state (server-authoritative sessions)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
@@ -178,6 +180,22 @@ export function ChapterView() {
   }
   function rejectProposal(sceneId: string) {
     setProposals(prev => { const n = { ...prev }; delete n[sceneId]; return n })
+  }
+  async function onReparseScene(sceneId: string) {
+    setReparsing(prev => new Set(prev).add(sceneId))
+    setReparseError('')
+    try {
+      const { scene } = await reparseScene(episodeId, chunkId, sceneId)
+      const { scene_id, ...changes } = scene
+      setProposals(prev => ({
+        ...prev,
+        [sceneId]: { scene_id: sceneId, changes, rationale: 'Re-parsed from source' },
+      }))
+    } catch (e) {
+      setReparseError(`Re-parse failed: ${String(e)}`)
+    } finally {
+      setReparsing(prev => { const n = new Set(prev); n.delete(sceneId); return n })
+    }
   }
   async function onSaveScenes() {
     setSavingScenes(true)
@@ -346,6 +364,9 @@ export function ChapterView() {
                 {skipped > 0 && (
                   <div className="mb-2 text-[11px] text-stone">{skipped} suggestion(s) skipped (scene not found).</div>
                 )}
+                {reparseError && (
+                  <div className="mb-2 text-[11px] text-brand-error">{reparseError}</div>
+                )}
                 <div className="space-y-2.5">
                   {scenes.map(s => (
                     <EditableSceneCard
@@ -358,6 +379,8 @@ export function ChapterView() {
                       onSaveLocal={saveLocalScene}
                       onAcceptProposal={() => acceptProposal(s.scene_id)}
                       onRejectProposal={() => rejectProposal(s.scene_id)}
+                      onReparse={() => onReparseScene(s.scene_id)}
+                      reparsing={reparsing.has(s.scene_id)}
                     />
                   ))}
                 </div>
