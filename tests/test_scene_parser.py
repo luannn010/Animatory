@@ -215,3 +215,90 @@ async def test_parse_chunk_prompt_includes_emotions_and_known_names(tmp_path):
     assert "commanding" in prompt
     assert "narration" in prompt
     assert "Tư An" in prompt
+
+
+@pytest.mark.asyncio
+async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
+    from animatory.scene_parser import reparse_scene
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Đại Càn", "aliases": ["đại cản"]}],
+    )
+    returned = {
+        "scene_id": "WRONG_ID",  # model returns the wrong id — must be forced back
+        "location": "Hall", "characters": ["đại cản"], "shot_type": "wide",
+        "action": "đại cản bước vào",
+        "dialogue": [{"character": "đại cản", "line": "Quỳ.", "emotion": "commanding"}],
+        "narration": [], "mood": "tense",
+    }
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(returned)))
+        MockClient.return_value = instance
+        scene = await reparse_scene(
+            chunk_id="C001", chunk_text="whole chunk text",
+            anchor_scene={"scene_id": "C001_S02", "action": "old action"},
+            registry=reg, scene_id="C001_S02",
+        )
+    assert scene["scene_id"] == "C001_S02"            # forced to requested id
+    assert scene["characters"] == ["Đại Càn"]          # normalized
+    assert scene["dialogue"][0]["character"] == "Đại Càn"
+    assert scene["dialogue"][0]["emotion"] == "commanding"
+    assert len(reg.characters) == 1                     # NOT grown (no learn)
+    assert not (tmp_path / "entities.json").exists()    # no registry save
+
+
+@pytest.mark.asyncio
+async def test_reparse_scene_handles_scenes_wrapper():
+    from animatory.scene_parser import reparse_scene
+    reg = er.EntityRegistry(episode_id="ep1")
+    wrapped = {"scenes": [{
+        "scene_id": "x", "location": "L", "characters": [], "shot_type": "wide",
+        "action": "a", "dialogue": [], "narration": [], "mood": "m",
+    }]}
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(wrapped)))
+        MockClient.return_value = instance
+        scene = await reparse_scene(
+            chunk_id="C001", chunk_text="t",
+            anchor_scene={"scene_id": "C001_S01"}, registry=reg, scene_id="C001_S01",
+        )
+    assert scene["scene_id"] == "C001_S01"
+    assert scene["location"] == "L"
+
+
+@pytest.mark.asyncio
+async def test_reparse_scene_prompt_has_anchor_and_known_names():
+    from animatory.scene_parser import reparse_scene
+    reg = er.EntityRegistry(episode_id="ep1", characters=[{"canonical": "Tư An", "aliases": []}])
+    captured = {}
+
+    def capture(*args, **kwargs):
+        captured["payload"] = kwargs.get("json")
+        return _make_mock_response(json.dumps({
+            "scene_id": "C001_S01", "location": "L", "characters": [],
+            "shot_type": "wide", "action": "a", "dialogue": [], "narration": [], "mood": "m",
+        }))
+
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(side_effect=capture)
+        MockClient.return_value = instance
+        await reparse_scene(
+            chunk_id="C001", chunk_text="the full chapter body",
+            anchor_scene={"scene_id": "C001_S01", "action": "ANCHOR_MARKER"},
+            registry=reg, scene_id="C001_S01",
+        )
+
+    prompt = captured["payload"]["messages"][0]["content"]
+    assert "ANCHOR_MARKER" in prompt
+    assert "Tư An" in prompt
+    assert "the full chapter body" in prompt
+    assert "commanding" in prompt

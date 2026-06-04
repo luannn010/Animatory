@@ -62,6 +62,45 @@ Chapter text:
 {chunk_text}
 ---"""
 
+_REPARSE_TEMPLATE = """\
+You are a Vietnamese novel-to-animation production assistant.
+Re-extract a SINGLE scene from the chapter text below. You are CORRECTING one
+existing scene — fix mistakes: wrong speaker attribution, narration mistaken for
+dialogue (or vice versa), wrong character/location spelling, and emotions.
+
+Return ONLY one scene as valid JSON (a single object, NOT an array, no markdown)
+matching this schema, keeping the SAME "scene_id":
+
+{{
+  "scene_id": "{scene_id}",
+  "location": "string",
+  "characters": ["string"],
+  "shot_type": "wide | medium | close-up | insert | POV",
+  "action": "string",
+  "dialogue": [
+    {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
+  ],
+  "narration": ["string"],
+  "mood": "string"
+}}
+
+Rules:
+- "dialogue" holds ONLY lines spoken aloud by a named character; "narration" is
+  narrator / voice-over prose. Do NOT invent a "Narrator" character.
+- Choose "emotion" from the listed set (omit if unclear); "intensity" is optional.
+- Known names — use EXACTLY these spellings:
+  characters: {known_characters}
+  locations: {known_locations}
+
+The scene to re-extract currently looks like this (use it to locate the right
+part of the chapter):
+{anchor}
+
+Chapter text:
+---
+{chunk_text}
+---"""
+
 
 def _qwen_env(
     qwen_endpoint: str | None = None,
@@ -122,6 +161,7 @@ async def _call_qwen(
                 "[qwen] %s attempt %d/%d: cannot reach Qwen at %s -> %s",
                 label, attempt, retries, endpoint, repr(exc),
             )
+            # repr() is used because ReadError/ConnectError stringify to an empty message.
             last_exc = exc
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning(
@@ -193,6 +233,57 @@ async def parse_chunk(
     out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("[parse_chunk] chunk=%s wrote %s (%d scenes)", chunk_id, out_path, len(result["scenes"]))
     return out_path
+
+
+async def reparse_scene(
+    chunk_id: str,
+    chunk_text: str,
+    anchor_scene: dict,
+    registry: entity_registry.EntityRegistry,
+    *,
+    scene_id: str,
+    qwen_endpoint: str | None = None,
+    model: str | None = None,
+    max_retries: int | None = None,
+) -> dict:
+    """Re-extract a single scene from the chapter. Sends the whole chunk plus the
+    scene as an anchor; consults the registry for known names and normalizes the
+    result. Does NOT write files, learn, or save the registry — the caller decides
+    whether to keep the result."""
+    endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
+        qwen_endpoint, model, max_retries
+    )
+    known = registry.known_names()
+    prompt = _REPARSE_TEMPLATE.format(
+        scene_id=scene_id,
+        emotions=", ".join(EMOTIONS),
+        intensities=" | ".join(INTENSITIES),
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+        anchor=json.dumps(anchor_scene, ensure_ascii=False, indent=2),
+        chunk_text=chunk_text,
+    )
+
+    logger.info(
+        "[reparse_scene] chunk=%s scene=%s chars=%d", chunk_id, scene_id, len(chunk_text)
+    )
+
+    data = await _call_qwen(
+        prompt, label=scene_id, endpoint=endpoint, model_name=model_name,
+        retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
+    )
+
+    # Accept a bare object, a list, or a {"scenes": [obj]} wrapper.
+    if isinstance(data, list):
+        scene = data[0] if data else {}
+    elif isinstance(data, dict) and isinstance(data.get("scenes"), list):
+        scene = data["scenes"][0] if data["scenes"] else {}
+    else:
+        scene = data
+
+    scene = dict(scene)
+    scene["scene_id"] = scene_id  # always keep the requested id
+    return registry.normalize_scene(scene)
 
 
 ProgressFn = Callable[[int, int, str], Awaitable[None]]
