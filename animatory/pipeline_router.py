@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
-from animatory import entity_registry
+from animatory import entity_registry, scene_source
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode, reparse_scene
@@ -404,6 +404,25 @@ async def reparse_chunk_scene(episode_id: str, chunk_id: str, scene_id: str):
     )
     logger.info("[reparse] episode=%s chunk=%s scene=%s done", episode_id, chunk_id, scene_id)
     return {"scene": scene}
+
+
+@router.get("/episodes/{episode_id}/chunks/{chunk_id}/scenes/{scene_id}/source")
+async def get_scene_source(episode_id: str, chunk_id: str, scene_id: str):
+    """Best-effort: locate where this scene's text sits in the chapter source.
+
+    Read-only. Uses edited-preferred text + scenes (the same the panel renders),
+    so returned line indices line up with the chapter text the client displays.
+    """
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)  # 404 if episode/chunk unknown
+    doc = _scenes_payload(ep_dir, chunk_id)
+    if doc is None:
+        raise HTTPException(status_code=409, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    scene = next((s for s in doc.get("scenes", []) if s.get("scene_id") == scene_id), None)
+    if scene is None:
+        raise HTTPException(status_code=404, detail=f"Scene '{scene_id}' not found in chunk '{chunk_id}'")
+    text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    return scene_source.locate(scene, text)
 
 
 @router.get("/episodes/{episode_id}/entities")

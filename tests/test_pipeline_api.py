@@ -681,3 +681,52 @@ async def test_reparse_route_409_when_not_parsed(client, tmp_path, monkeypatch):
     cid = manifest["chunks"][0]["chunk_id"]
     r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{cid}_S01/reparse")
     assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_scene_source_route_returns_match(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="srctest")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    sid = f"{cid}_S01"
+    # Edited text is preferred by the route — write known content there.
+    (ep_dir / f"{cid}.edited.txt").write_text(
+        "Dòng đầu không khớp.\nTu An chạy trốn khỏi phủ công chúa.\nDòng cuối.",
+        encoding="utf-8")
+    (ep_dir / f"{cid}_scenes.json").write_text(_json.dumps({"chunk_id": cid, "scenes": [
+        {"scene_id": sid, "location": "L", "characters": [], "shot_type": "wide",
+         "action": "Tu An chạy trốn khỏi phủ công chúa.", "dialogue": [], "narration": [], "mood": "m"}]}),
+        encoding="utf-8")
+
+    r = await client.get(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{sid}/source")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["found"] is True
+    assert body["line_start"] == 1 and body["line_end"] == 1
+    assert "Tu An chạy trốn" in body["excerpt"]
+
+
+@pytest.mark.asyncio
+async def test_scene_source_route_404_unknown_scene(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="src404")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    (ep_dir / f"{cid}_scenes.json").write_text(
+        _json.dumps({"chunk_id": cid, "scenes": []}), encoding="utf-8")
+    r = await client.get(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/NOPE_S99/source")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_scene_source_route_409_when_not_parsed(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="src409")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    r = await client.get(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{cid}_S01/source")
+    assert r.status_code == 409
