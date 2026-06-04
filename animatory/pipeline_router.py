@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from animatory import entity_registry
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
-from animatory.scene_parser import parse_episode
+from animatory.scene_parser import parse_episode, reparse_scene
 from animatory.chat_engine import stream_chat, generate_title
 from animatory.voice_profiles import aggregate
 from sse_starlette.sse import EventSourceResponse
@@ -378,6 +378,32 @@ async def reset_chunk_scenes(episode_id: str, chunk_id: str):
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Chunk '{chunk_id}' has not been parsed yet")
     return doc
+
+
+@router.post("/episodes/{episode_id}/chunks/{chunk_id}/scenes/{scene_id}/reparse")
+async def reparse_chunk_scene(episode_id: str, chunk_id: str, scene_id: str):
+    """Re-extract a single scene from source and return it (NOT persisted).
+
+    The frontend applies the result via the normal save flow. Consults + normalizes
+    against the entity registry but does not grow it.
+    """
+    ep_dir = _processed_dir() / episode_id
+    meta = _chunk_meta(ep_dir, chunk_id)  # 404 if episode/chunk unknown
+    doc = _scenes_payload(ep_dir, chunk_id)
+    if doc is None:
+        raise HTTPException(status_code=409, detail=f"Chunk '{chunk_id}' has not been parsed yet")
+    anchor = next((s for s in doc.get("scenes", []) if s.get("scene_id") == scene_id), None)
+    if anchor is None:
+        raise HTTPException(status_code=404, detail=f"Scene '{scene_id}' not found in chunk '{chunk_id}'")
+
+    chunk_text = _text_payload(ep_dir, chunk_id, meta)["text"]
+    registry = entity_registry.load(episode_id, ep_dir)
+    scene = await reparse_scene(
+        chunk_id=chunk_id, chunk_text=chunk_text, anchor_scene=anchor,
+        registry=registry, scene_id=scene_id,
+    )
+    logger.info("[reparse] episode=%s chunk=%s scene=%s done", episode_id, chunk_id, scene_id)
+    return {"scene": scene}
 
 
 @router.get("/episodes/{episode_id}/entities")

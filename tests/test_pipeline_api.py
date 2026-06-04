@@ -3,7 +3,7 @@ from __future__ import annotations
 import io, json
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from animatory.pipeline_router import SceneModel, SceneDialogueModel
 
 TINY_TXT = b"Sentence one. Sentence two. " * 30  # ~180 words
@@ -621,3 +621,63 @@ async def test_voice_profiles_route_aggregates_scenes(client, tmp_path, monkeypa
     profiles = r.json()["profiles"]
     assert profiles[0]["character"] == "Tư An"
     assert profiles[0]["dominant_emotion"] == "angry"
+
+
+def _qwen_resp(content: str):
+    m = MagicMock()
+    m.raise_for_status = MagicMock()
+    m.json.return_value = {"choices": [{"message": {"content": content}}]}
+    return m
+
+
+@pytest.mark.asyncio
+async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rptest")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    sid = f"{cid}_S01"
+    (ep_dir / f"{cid}_scenes.json").write_text(_json.dumps({"chunk_id": cid, "scenes": [
+        {"scene_id": sid, "location": "L", "characters": ["A"], "shot_type": "wide",
+         "action": "old", "dialogue": [], "narration": [], "mood": "m"}]}), encoding="utf-8")
+
+    returned = {"scene_id": sid, "location": "L2", "characters": ["A"], "shot_type": "medium",
+                "action": "new action", "dialogue": [], "narration": [], "mood": "calm"}
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(return_value=_qwen_resp(_json.dumps(returned)))
+        MockClient.return_value = instance
+        r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{sid}/reparse")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["scene"]["scene_id"] == sid
+    assert body["scene"]["action"] == "new action"
+
+
+@pytest.mark.asyncio
+async def test_reparse_route_404_unknown_scene(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rp404")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    (ep_dir / f"{cid}_scenes.json").write_text(
+        _json.dumps({"chunk_id": cid, "scenes": []}), encoding="utf-8")
+
+    r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/NOPE_S99/reparse")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reparse_route_409_when_not_parsed(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rp409")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{cid}_S01/reparse")
+    assert r.status_code == 409
