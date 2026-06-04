@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.scene_parser import parse_episode
-from animatory.chat_engine import stream_chat
+from animatory.chat_engine import stream_chat, generate_title
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
@@ -168,18 +168,14 @@ class SaveScenesRequest(BaseModel):
     scenes: list[SceneModel]
 
 
-class ChatTurnMessage(BaseModel):
-    role: str
-    content: str
-
-
 class ChatMentions(BaseModel):
     scenes: list[str] = []
     raw: bool = False
 
 
 class ChatStreamRequest(BaseModel):
-    messages: list[ChatTurnMessage]
+    session_id: str | None = None
+    message: str
     thinking: bool = False
     mentions: ChatMentions = ChatMentions()
 
@@ -405,33 +401,67 @@ async def reset_chunk_text(episode_id: str, chunk_id: str):
 
 
 @router.post("/episodes/{episode_id}/chunks/{chunk_id}/chat/stream")
-async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest):
+async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, request: Request):
     ep_dir = _processed_dir() / episode_id
     meta = _chunk_meta(ep_dir, chunk_id)
+    store = request.app.state.chat_store
+
+    if body.session_id:
+        await _owned_session(request, episode_id, chunk_id, body.session_id)
+        session_id = body.session_id
+    else:
+        session_id = (await store.create_session(episode_id, chunk_id, now=_now()))["session_id"]
 
     doc = _scenes_payload(ep_dir, chunk_id)
     all_scenes = doc.get("scenes", []) if doc else []
     valid_ids = {s["scene_id"] for s in all_scenes}
     scene_index = [
-        {"scene_id": s["scene_id"], "location": s.get("location", ""),
-         "characters": s.get("characters", [])}
+        {"scene_id": s["scene_id"], "location": s.get("location", ""), "characters": s.get("characters", [])}
         for s in all_scenes
     ]
     wanted = set(body.mentions.scenes) & valid_ids
     mentioned = [s for s in all_scenes if s["scene_id"] in wanted]
     raw_text = _text_payload(ep_dir, chunk_id, meta)["text"] if body.mentions.raw else None
-    messages = [m.model_dump() for m in body.messages]
+
+    prior = await store.get_messages(session_id)
+    is_first = len(prior) == 0
+    await store.append_message(session_id, "user", body.message, None, now=_now())
+    history = [{"role": m["role"], "content": m["content"]} for m in await store.get_messages(session_id)]
 
     async def gen():
+        yield {"event": "session", "data": json.dumps({"session_id": session_id})}
+        reply_parts: list[str] = []
+        tool_calls: list[dict] = []
+        prompt_tokens = 0
+        errored = False
         async for ev in stream_chat(
-            chunk_id=chunk_id,
-            scene_index=scene_index,
-            mentioned_scenes=mentioned,
-            raw_text=raw_text,
-            messages=messages,
-            thinking=body.thinking,
+            chunk_id=chunk_id, scene_index=scene_index, mentioned_scenes=mentioned,
+            raw_text=raw_text, messages=history, thinking=body.thinking,
         ):
-            yield {"event": ev["event"], "data": json.dumps(ev["data"], ensure_ascii=False)}
+            etype = ev["event"]
+            if etype == "done":
+                continue  # we emit our own done after persistence
+            if etype == "reply":
+                reply_parts.append(ev["data"].get("delta", ""))
+            elif etype == "tool":
+                tool_calls.append({"kind": ev["data"]["kind"], "payload": ev["data"]["payload"]})
+            elif etype == "usage":
+                prompt_tokens = ev["data"].get("prompt_tokens", 0)
+            yield {"event": etype, "data": json.dumps(ev["data"], ensure_ascii=False)}
+            if etype == "error":
+                errored = True
+                break
+        if errored:
+            return  # user turn already persisted; no assistant turn
+        reply = "".join(reply_parts)
+        await store.append_message(session_id, "assistant", reply, tool_calls or None, now=_now())
+        if prompt_tokens:
+            await store.set_token_count(session_id, prompt_tokens, now=_now())
+        if is_first:
+            title = await generate_title(history + [{"role": "assistant", "content": reply}])
+            await store.set_title(session_id, title, now=_now())
+            yield {"event": "title", "data": json.dumps({"title": title})}
+        yield {"event": "done", "data": json.dumps({})}
 
     return EventSourceResponse(gen())
 

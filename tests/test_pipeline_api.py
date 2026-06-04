@@ -330,17 +330,17 @@ async def test_chat_stream_relays_engine_events(client: AsyncClient, tmp_path, m
         yield {"event": "reply", "data": {"delta": "hi"}}
         yield {"event": "done", "data": {}}
 
-    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream):
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", new_callable=AsyncMock, return_value="T"):
         r = await client.post(
             f"/pipeline/episodes/ch1/chunks/{cid}/chat/stream",
-            json={"messages": [{"role": "user", "content": "hi"}], "thinking": False,
-                  "mentions": {"scenes": [], "raw": False}},
+            json={"session_id": None, "message": "hi", "thinking": False, "mentions": {"scenes": [], "raw": False}},
         )
     assert r.status_code == 200
     assert "text/event-stream" in r.headers["content-type"]
     body = r.text
+    assert "event: session" in body
     assert "event: reply" in body
-    assert '"delta": "hi"' in body or '"delta":"hi"' in body
     assert "event: done" in body
 
 
@@ -349,7 +349,7 @@ async def test_chat_stream_unknown_chunk_404(client: AsyncClient, tmp_path, monk
     await _chunk_one(client, tmp_path, monkeypatch, "ch2")
     r = await client.post(
         "/pipeline/episodes/ch2/chunks/C999/chat/stream",
-        json={"messages": [], "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        json={"session_id": None, "message": "hi", "thinking": False, "mentions": {"scenes": [], "raw": False}},
     )
     assert r.status_code == 404
 
@@ -364,14 +364,83 @@ async def test_chat_stream_drops_foreign_scene_mentions(client: AsyncClient, tmp
         captured["mentioned"] = kwargs.get("mentioned_scenes", [])
         yield {"event": "done", "data": {}}
 
-    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream):
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", new_callable=AsyncMock, return_value="T"):
         await client.post(
             f"/pipeline/episodes/ch3/chunks/{cid}/chat/stream",
-            json={"messages": [{"role": "user", "content": "x"}], "thinking": False,
+            json={"session_id": None, "message": "x", "thinking": False,
                   "mentions": {"scenes": [f"{cid}_S01", "OTHER_S09"], "raw": False}},
         )
     ids = [s["scene_id"] for s in captured["mentioned"]]
     assert ids == [f"{cid}_S01"]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_persists_turns_and_titles(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "st1")
+
+    async def fake_stream(*args, **kwargs):
+        yield {"event": "reply", "data": {"delta": "hello"}}
+        yield {"event": "usage", "data": {"prompt_tokens": 42, "total_tokens": 50, "context_limit": 32768, "skipped_mentions": []}}
+        yield {"event": "done", "data": {}}
+
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", new_callable=AsyncMock, return_value="First Title"):
+        r = await client.post(
+            f"/pipeline/episodes/st1/chunks/{cid}/chat/stream",
+            json={"session_id": None, "message": "hi", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+    body = r.text
+    assert "event: session" in body
+    assert "event: title" in body
+    assert "First Title" in body
+
+    sessions = (await client.get(f"/pipeline/episodes/st1/chunks/{cid}/chat/sessions")).json()
+    assert len(sessions) == 1
+    sid = sessions[0]["session_id"]
+    assert sessions[0]["title"] == "First Title"
+    assert sessions[0]["token_count"] == 42
+    msgs = (await client.get(f"/pipeline/episodes/st1/chunks/{cid}/chat/sessions/{sid}")).json()["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assert msgs[1]["content"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_second_turn_no_retitle(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "st2")
+
+    async def fake_stream(*args, **kwargs):
+        yield {"event": "reply", "data": {"delta": "ok"}}
+        yield {"event": "done", "data": {}}
+
+    titler_calls = {"n": 0}
+    async def fake_title(*args, **kwargs):
+        titler_calls["n"] += 1
+        return "Title"
+
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", side_effect=fake_title):
+        await client.post(
+            f"/pipeline/episodes/st2/chunks/{cid}/chat/stream",
+            json={"session_id": None, "message": "one", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+        sid = (await client.get(f"/pipeline/episodes/st2/chunks/{cid}/chat/sessions")).json()[0]["session_id"]
+        r2 = await client.post(
+            f"/pipeline/episodes/st2/chunks/{cid}/chat/stream",
+            json={"session_id": sid, "message": "two", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+    assert "event: title" not in r2.text
+    assert titler_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_unknown_session_404(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "st3")
+    r = await client.post(
+        f"/pipeline/episodes/st3/chunks/{cid}/chat/stream",
+        json={"session_id": "nope", "message": "hi", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+    )
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
