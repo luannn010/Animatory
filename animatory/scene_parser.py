@@ -39,7 +39,7 @@ Return ONLY valid JSON matching this schema - no explanation, no markdown:
       "shot_type": "wide | medium | close-up | insert | POV",
       "action": "string",
       "dialogue": [
-        {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "low | medium | high"}}
+        {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
       ],
       "narration": ["string"],
       "mood": "string"
@@ -89,6 +89,7 @@ async def parse_chunk(
         chunk_id=chunk_id,
         chunk_text=chunk_text,
         emotions=", ".join(EMOTIONS),
+        intensities=" | ".join(INTENSITIES),
         known_characters=", ".join(known["characters"]) or "(none yet)",
         known_locations=", ".join(known["locations"]) or "(none yet)",
     )
