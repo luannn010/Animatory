@@ -15,6 +15,8 @@ import { api } from '../../api'
 import { applyCorrection } from '../../components/refine/corrections'
 import { RawTextEditor } from '../../components/refine/RawTextEditor'
 import { EditableSceneCard } from '../../components/refine/EditableSceneCard'
+import { EntityRegistryPanel } from '../../components/refine/EntityRegistryPanel'
+import { VoiceProfilePanel } from '../../components/refine/VoiceProfilePanel'
 
 export function ChapterView() {
   const { id = '', episodeId = '', chunkId = '' } = useParams()
@@ -55,6 +57,7 @@ export function ChapterView() {
   const [parsing, setParsing] = useState(false)
   const [parseProgress, setParseProgress] = useState<{ done: number; total: number } | null>(null)
   const [skipped, setSkipped] = useState(0)
+  const [profilesRefresh, setProfilesRefresh] = useState(0)
   const parseEsRef = useRef<{ close(): void } | null>(null)
 
   const textDirty = text !== textBaseline
@@ -151,7 +154,7 @@ export function ChapterView() {
           }
           if (event.type === 'complete') {
             es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
-            setProposals({}); loadScenes()
+            setProposals({}); loadScenes(); setProfilesRefresh(k => k + 1)
           }
           if (event.type === 'status' && event.data?.status === 'failed') {
             es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
@@ -386,6 +389,15 @@ export function ChapterView() {
           />
         </div>
       </div>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-ink mb-1">Episode insights</h2>
+        <p className="text-xs text-stone mb-3">Names &amp; voices span the whole episode, not just this chapter.</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <EntityRegistryPanel episodeId={episodeId} />
+          <VoiceProfilePanel episodeId={episodeId} refreshKey={profilesRefresh} />
+        </div>
+      </section>
     </div>
   )
 }
