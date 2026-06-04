@@ -12,9 +12,17 @@ from pathlib import Path
 
 import httpx
 
+from animatory import entity_registry
+
 logger = logging.getLogger(__name__)
 
 _THINKING_RE = re.compile(r"<(?:think|reasoning)>.*?</(?:think|reasoning)>", re.DOTALL)
+
+EMOTIONS = [
+    "neutral", "happy", "sad", "angry", "fearful", "surprised",
+    "tender", "mocking", "commanding", "anxious", "determined", "disgusted",
+]
+INTENSITIES = ["low", "medium", "high"]
 
 _PROMPT_TEMPLATE = """\
 You are a Vietnamese novel-to-animation production assistant.
@@ -30,11 +38,24 @@ Return ONLY valid JSON matching this schema - no explanation, no markdown:
       "characters": ["string"],
       "shot_type": "wide | medium | close-up | insert | POV",
       "action": "string",
-      "dialogue": [{{"character": "string", "line": "string"}}],
+      "dialogue": [
+        {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "low | medium | high"}}
+      ],
+      "narration": ["string"],
       "mood": "string"
     }}
   ]
 }}
+
+Rules:
+- "dialogue" holds ONLY lines spoken aloud by a named character. Choose "emotion"
+  from the listed set (omit it if genuinely unclear); "intensity" is optional.
+- "narration" is narrator / voice-over prose NOT spoken by any character
+  (descriptions, scene-setting). Detect it and put each narration sentence as a
+  string in "narration". Do NOT invent a "Narrator" character.
+- Known names — use EXACTLY these spellings wherever they appear:
+  characters: {known_characters}
+  locations: {known_locations}
 
 Chapter text:
 ---
@@ -62,7 +83,15 @@ async def parse_chunk(
     # so disable thinking unless explicitly re-enabled via QWEN_ENABLE_THINKING=1.
     enable_thinking = os.environ.get("QWEN_ENABLE_THINKING", "0") == "1"
 
-    prompt = _PROMPT_TEMPLATE.format(chunk_id=chunk_id, chunk_text=chunk_text)
+    registry = entity_registry.load(episode_id, output_dir)
+    known = registry.known_names()
+    prompt = _PROMPT_TEMPLATE.format(
+        chunk_id=chunk_id,
+        chunk_text=chunk_text,
+        emotions=", ".join(EMOTIONS),
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
@@ -115,13 +144,20 @@ async def parse_chunk(
             f"(last error: {type(last_exc).__name__}: {last_exc})"
         ) from last_exc
 
+    raw_scenes = scenes_data.get("scenes", [])
+    scenes = [registry.normalize_scene(s) for s in raw_scenes]
+    registry.learn(scenes)
+    entity_registry.save(
+        registry, output_dir, now=datetime.now(timezone.utc).isoformat()
+    )
+
     out_path = output_dir / f"{chunk_id}_scenes.json"
     result = {
         "chunk_id": chunk_id,
         "source_file": episode_id + ".txt",
         "model": model_name,
         "parsed_at": datetime.now(timezone.utc).isoformat(),
-        "scenes": scenes_data.get("scenes", []),
+        "scenes": scenes,
     }
     out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("[parse_chunk] chunk=%s wrote %s (%d scenes)", chunk_id, out_path, len(result["scenes"]))

@@ -136,3 +136,82 @@ async def test_parse_episode_prefers_edited_text(tmp_path):
         await parse_episode("ep1", ep_dir)
 
     assert seen["text"] == "cleaned text."
+
+
+from animatory import entity_registry as er
+
+ENRICHED_RESPONSE = {
+    "chunk_id": "C001",
+    "scenes": [
+        {
+            "scene_id": "C001_S01",
+            "location": "cao palace",
+            "characters": ["đại cản"],
+            "shot_type": "wide",
+            "action": "đại cản bước vào",
+            "dialogue": [{"character": "đại cản", "line": "Quỳ.", "emotion": "commanding", "intensity": "high"}],
+            "narration": ["Đêm xuống."],
+            "mood": "tense",
+        }
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_parse_chunk_normalizes_and_grows_registry(tmp_path):
+    # Seed a registry with a canonical + alias so normalization is deterministic.
+    er.save(
+        er.EntityRegistry(
+            episode_id="ep1",
+            characters=[{"canonical": "Đại Càn", "aliases": ["đại cản"]}],
+            locations=[{"canonical": "Cao's Palace", "aliases": ["cao palace"]}],
+        ),
+        tmp_path,
+        now="2026-06-04T00:00:00Z",
+    )
+
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(ENRICHED_RESPONSE)))
+        MockClient.return_value = instance
+        out = await parse_chunk("C001", "text", "ep1", tmp_path)
+
+    scene = json.loads(out.read_text(encoding="utf-8"))["scenes"][0]
+    assert scene["location"] == "Cao's Palace"
+    assert scene["characters"] == ["Đại Càn"]
+    assert scene["dialogue"][0]["character"] == "Đại Càn"
+    assert scene["dialogue"][0]["emotion"] == "commanding"
+    assert scene["narration"] == ["Đêm xuống."]
+    assert scene["action"] == "đại cản bước vào"
+
+    reg = er.load("ep1", tmp_path)
+    assert [e["canonical"] for e in reg.characters] == ["Đại Càn"]
+
+
+@pytest.mark.asyncio
+async def test_parse_chunk_prompt_includes_emotions_and_known_names(tmp_path):
+    er.save(
+        er.EntityRegistry(episode_id="ep1", characters=[{"canonical": "Tư An", "aliases": []}]),
+        tmp_path,
+        now="2026-06-04T00:00:00Z",
+    )
+    captured = {}
+
+    def capture(*args, **kwargs):
+        captured["payload"] = kwargs.get("json")
+        return _make_mock_response(json.dumps({"chunk_id": "C001", "scenes": []}))
+
+    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(side_effect=capture)
+        MockClient.return_value = instance
+        await parse_chunk("C001", "text", "ep1", tmp_path)
+
+    prompt = captured["payload"]["messages"][0]["content"]
+    assert "commanding" in prompt
+    assert "narration" in prompt
+    assert "Tư An" in prompt
