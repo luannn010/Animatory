@@ -63,47 +63,44 @@ Chapter text:
 ---"""
 
 
-async def parse_chunk(
-    chunk_id: str,
-    chunk_text: str,
-    episode_id: str,
-    output_dir: Path,
+def _qwen_env(
     qwen_endpoint: str | None = None,
     model: str | None = None,
     max_retries: int | None = None,
-) -> Path:
-    """Call Qwen, write {chunk_id}_scenes.json into output_dir, return its path."""
+) -> tuple[str, str, int, float, bool]:
+    """Resolve Qwen connection settings from args/env.
+
+    Returns (endpoint, model_name, retries, timeout_s, enable_thinking).
+    Qwen3.5 emits chain-of-thought by default, which is slow; we disable thinking
+    unless QWEN_ENABLE_THINKING=1.
+    """
     endpoint = (qwen_endpoint or os.environ.get("QWEN_ENDPOINT", "http://localhost:1090")).rstrip("/")
     model_name = model or os.environ.get("QWEN_MODEL", "qwen3.5")
     retries = max_retries if max_retries is not None else int(os.environ.get("QWEN_MAX_RETRIES", "3"))
     timeout_s = float(os.environ.get("QWEN_TIMEOUT_S", "120"))
-
-    # Qwen3.5 emits chain-of-thought (reasoning_content) by default, which makes
-    # generation far slower and can blow past the timeout. We only want the JSON,
-    # so disable thinking unless explicitly re-enabled via QWEN_ENABLE_THINKING=1.
     enable_thinking = os.environ.get("QWEN_ENABLE_THINKING", "0") == "1"
+    return endpoint, model_name, retries, timeout_s, enable_thinking
 
-    registry = entity_registry.load(episode_id, output_dir)
-    known = registry.known_names()
-    prompt = _PROMPT_TEMPLATE.format(
-        chunk_id=chunk_id,
-        chunk_text=chunk_text,
-        emotions=", ".join(EMOTIONS),
-        intensities=" | ".join(INTENSITIES),
-        known_characters=", ".join(known["characters"]) or "(none yet)",
-        known_locations=", ".join(known["locations"]) or "(none yet)",
-    )
+
+async def _call_qwen(
+    prompt: str,
+    *,
+    label: str,
+    endpoint: str,
+    model_name: str,
+    retries: int,
+    timeout_s: float,
+    enable_thinking: bool,
+) -> dict:
+    """POST one chat-completion, strip thinking + markdown fences, return parsed
+    JSON. Retries with exponential backoff. Raises ValueError after `retries`
+    attempts. `label` identifies the caller in log lines / the error message."""
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
         "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
-
-    logger.info(
-        "[parse_chunk] chunk=%s episode=%s endpoint=%s model=%s chars=%d retries=%d timeout=%.0fs thinking=%s",
-        chunk_id, episode_id, endpoint, model_name, len(chunk_text), retries, timeout_s, enable_thinking,
-    )
 
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -117,33 +114,66 @@ async def parse_chunk(
                 cleaned = _THINKING_RE.sub("", raw).strip()
                 cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
                 cleaned = re.sub(r"\s*```$", "", cleaned)
-                scenes_data = json.loads(cleaned)
-                logger.info("[parse_chunk] chunk=%s attempt %d/%d OK", chunk_id, attempt, retries)
-                break
+                data = json.loads(cleaned)
+                logger.info("[qwen] %s attempt %d/%d OK", label, attempt, retries)
+                return data
         except httpx.HTTPError as exc:
-            # Connection/transport/HTTP-status error — the endpoint is unreachable or unhealthy.
-            # repr() is used because ReadError/ConnectError stringify to an empty message.
             logger.warning(
-                "[parse_chunk] chunk=%s attempt %d/%d: cannot reach Qwen at %s -> %s",
-                chunk_id, attempt, retries, endpoint, repr(exc),
+                "[qwen] %s attempt %d/%d: cannot reach Qwen at %s -> %s",
+                label, attempt, retries, endpoint, repr(exc),
             )
             last_exc = exc
         except (json.JSONDecodeError, KeyError) as exc:
-            # Endpoint responded but the body was not the JSON we expected.
             logger.warning(
-                "[parse_chunk] chunk=%s attempt %d/%d: invalid response from Qwen -> %s",
-                chunk_id, attempt, retries, repr(exc),
+                "[qwen] %s attempt %d/%d: invalid response from Qwen -> %s",
+                label, attempt, retries, repr(exc),
             )
             last_exc = exc
+
+    if isinstance(last_exc, httpx.HTTPError):
+        reason = f"could not reach Qwen endpoint {endpoint}/v1/chat/completions"
     else:
-        if isinstance(last_exc, httpx.HTTPError):
-            reason = f"could not reach Qwen endpoint {endpoint}/v1/chat/completions"
-        else:
-            reason = "could not parse JSON from Qwen response"
-        raise ValueError(
-            f"{reason} for {chunk_id} after {retries} attempts "
-            f"(last error: {type(last_exc).__name__}: {last_exc})"
-        ) from last_exc
+        reason = "could not parse JSON from Qwen response"
+    raise ValueError(
+        f"{reason} for {label} after {retries} attempts "
+        f"(last error: {type(last_exc).__name__}: {last_exc})"
+    ) from last_exc
+
+
+async def parse_chunk(
+    chunk_id: str,
+    chunk_text: str,
+    episode_id: str,
+    output_dir: Path,
+    qwen_endpoint: str | None = None,
+    model: str | None = None,
+    max_retries: int | None = None,
+) -> Path:
+    """Call Qwen, write {chunk_id}_scenes.json into output_dir, return its path."""
+    endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
+        qwen_endpoint, model, max_retries
+    )
+
+    registry = entity_registry.load(episode_id, output_dir)
+    known = registry.known_names()
+    prompt = _PROMPT_TEMPLATE.format(
+        chunk_id=chunk_id,
+        chunk_text=chunk_text,
+        emotions=", ".join(EMOTIONS),
+        intensities=" | ".join(INTENSITIES),
+        known_characters=", ".join(known["characters"]) or "(none yet)",
+        known_locations=", ".join(known["locations"]) or "(none yet)",
+    )
+
+    logger.info(
+        "[parse_chunk] chunk=%s episode=%s endpoint=%s model=%s chars=%d retries=%d timeout=%.0fs thinking=%s",
+        chunk_id, episode_id, endpoint, model_name, len(chunk_text), retries, timeout_s, enable_thinking,
+    )
+
+    scenes_data = await _call_qwen(
+        prompt, label=chunk_id, endpoint=endpoint, model_name=model_name,
+        retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
+    )
 
     raw_scenes = scenes_data.get("scenes", [])
     scenes = [registry.normalize_scene(s) for s in raw_scenes]
