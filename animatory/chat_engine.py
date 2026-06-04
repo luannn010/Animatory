@@ -71,8 +71,11 @@ def _build_messages(scene_index, mentioned_scenes, raw_text, messages, use_tools
         ctx += "\n\nFull detail for mentioned scene(s):\n" + json.dumps(mentioned_scenes, ensure_ascii=False)
     if raw_text:
         ctx += f"\n\nRaw chapter text:\n---\n{raw_text}\n---"
+    # Qwen's chat template allows only ONE system message and it must be first;
+    # a second system turn raises "System message must be at the beginning."
+    # Fold the instructions + per-chapter context into a single leading turn.
     return (
-        [{"role": "system", "content": system}, {"role": "system", "content": ctx}]
+        [{"role": "system", "content": system + "\n\n" + ctx}]
         + [{"role": m["role"], "content": m["content"]} for m in messages]
     )
 

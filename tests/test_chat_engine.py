@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from animatory.chat_engine import stream_chat
+from animatory.chat_engine import stream_chat, _build_messages
 
 
 def _sse_lines(chunks: list[dict]):
@@ -37,6 +37,26 @@ def _mock_stream(lines: list[str]):
 
 async def _collect(gen):
     return [ev async for ev in gen]
+
+
+def test_build_messages_emits_single_leading_system_message():
+    """Qwen's chat template rejects a 2nd system message ('System message must be
+    at the beginning'). Context must be folded into one leading system turn."""
+    msgs = _build_messages(
+        scene_index=[{"scene_id": "C001_S03", "location": "sân", "characters": ["Tu An"]}],
+        mentioned_scenes=[{"scene_id": "C001_S03", "dialogue": []}],
+        raw_text="Trương An Thế bước vào.",
+        messages=[{"role": "user", "content": "reparse scene 3"}],
+        use_tools=True,
+    )
+    system_msgs = [m for m in msgs if m["role"] == "system"]
+    assert len(system_msgs) == 1, f"expected 1 system message, got {len(system_msgs)}"
+    assert msgs[0]["role"] == "system"
+    # the folded system turn must still carry the scene index + raw text context
+    assert "C001_S03" in msgs[0]["content"]
+    assert "Trương An Thế" in msgs[0]["content"]
+    # user turn is preserved after the system turn
+    assert msgs[-1] == {"role": "user", "content": "reparse scene 3"}
 
 
 @pytest.mark.asyncio

@@ -11,3 +11,4 @@ animatory.db
 
 # Temp test/output logs
 *_out.txt
+*_run.log
