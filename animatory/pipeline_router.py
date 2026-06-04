@@ -425,8 +425,10 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
 
     prior = await store.get_messages(session_id)
     is_first = len(prior) == 0
-    await store.append_message(session_id, "user", body.message, None, now=_now())
-    history = [{"role": m["role"], "content": m["content"]} for m in await store.get_messages(session_id)]
+    history = (
+        [{"role": m["role"], "content": m["content"]} for m in prior]
+        + [{"role": "user", "content": body.message}]
+    )
 
     async def gen():
         yield {"event": "session", "data": json.dumps({"session_id": session_id})}
@@ -452,8 +454,9 @@ async def chat_stream(episode_id: str, chunk_id: str, body: ChatStreamRequest, r
                 errored = True
                 break
         if errored:
-            return  # user turn already persisted; no assistant turn
+            return
         reply = "".join(reply_parts)
+        await store.append_message(session_id, "user", body.message, None, now=_now())
         await store.append_message(session_id, "assistant", reply, tool_calls or None, now=_now())
         if prompt_tokens:
             await store.set_token_count(session_id, prompt_tokens, now=_now())

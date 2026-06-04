@@ -479,3 +479,57 @@ async def test_session_get_unknown_404(client: AsyncClient, tmp_path, monkeypatc
     cid = await _chunk_one(client, tmp_path, monkeypatch, "cs2")
     r = await client.get(f"/pipeline/episodes/cs2/chunks/{cid}/chat/sessions/does-not-exist")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_error_persists_nothing(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se9")
+
+    async def fake_stream(*args, **kwargs):
+        yield {"event": "error", "data": {"detail": "qwen down"}}
+
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", new_callable=AsyncMock, return_value="T"):
+        r = await client.post(
+            f"/pipeline/episodes/se9/chunks/{cid}/chat/stream",
+            json={"session_id": None, "message": "hi", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+    assert "event: error" in r.text
+    # A session was created (session event/id), but NO turns persisted on error.
+    sessions = (await client.get(f"/pipeline/episodes/se9/chunks/{cid}/chat/sessions")).json()
+    assert len(sessions) == 1
+    sid = sessions[0]["session_id"]
+    msgs = (await client.get(f"/pipeline/episodes/se9/chunks/{cid}/chat/sessions/{sid}")).json()["messages"]
+    assert msgs == []  # neither user nor assistant turn persisted
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_no_duplicate_user_on_retry(client: AsyncClient, tmp_path, monkeypatch):
+    cid = await _chunk_one(client, tmp_path, monkeypatch, "se10")
+
+    calls = {"n": 0}
+    async def fake_stream(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            yield {"event": "error", "data": {"detail": "transient"}}
+        else:
+            yield {"event": "reply", "data": {"delta": "ok"}}
+            yield {"event": "done", "data": {}}
+
+    with patch("animatory.pipeline_router.stream_chat", side_effect=fake_stream), \
+         patch("animatory.pipeline_router.generate_title", new_callable=AsyncMock, return_value="T"):
+        # turn 1 errors (nothing persisted)
+        await client.post(
+            f"/pipeline/episodes/se10/chunks/{cid}/chat/stream",
+            json={"session_id": None, "message": "hello", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+        sid = (await client.get(f"/pipeline/episodes/se10/chunks/{cid}/chat/sessions")).json()[0]["session_id"]
+        # retry the SAME message on the SAME session → succeeds
+        await client.post(
+            f"/pipeline/episodes/se10/chunks/{cid}/chat/stream",
+            json={"session_id": sid, "message": "hello", "thinking": False, "mentions": {"scenes": [], "raw": False}},
+        )
+    msgs = (await client.get(f"/pipeline/episodes/se10/chunks/{cid}/chat/sessions/{sid}")).json()["messages"]
+    # exactly one user turn + one assistant turn — no orphan from the failed attempt
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assert msgs[0]["content"] == "hello"
