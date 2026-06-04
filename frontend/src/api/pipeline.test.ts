@@ -1,6 +1,6 @@
 // frontend/src/api/pipeline.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, EMOTIONS, reparseScene } from './pipeline'
+import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, EMOTIONS, reparseScene, getSceneSource } from './pipeline'
 
 function mockFetch(body: unknown, ok = true, status = 200) {
   return vi.fn().mockResolvedValue({
@@ -78,5 +78,23 @@ describe('reparseScene client', () => {
   it('throws on non-ok', async () => {
     vi.stubGlobal('fetch', mockFetch({ detail: 'nope' }, false, 404))
     await expect(reparseScene('ep1', 'C001', 'X')).rejects.toThrow(/404/)
+  })
+})
+
+describe('getSceneSource client', () => {
+  it('GETs the scene source route and returns the match', async () => {
+    const f = mockFetch({ found: true, match_lines: [1], line_start: 1, line_end: 1, excerpt: 'x' })
+    vi.stubGlobal('fetch', f)
+    const res = await getSceneSource('ep1', 'C001', 'C001_S03')
+    expect(res.found).toBe(true)
+    expect(res.match_lines).toEqual([1])
+    const [url, init] = f.mock.calls[0]
+    expect(url).toContain('/pipeline/episodes/ep1/chunks/C001/scenes/C001_S03/source')
+    expect(init).toBeUndefined()  // plain GET, no init object
+  })
+
+  it('throws on non-ok', async () => {
+    vi.stubGlobal('fetch', mockFetch({ detail: 'no' }, false, 409))
+    await expect(getSceneSource('ep1', 'C001', 'X')).rejects.toThrow(/409/)
   })
 })
