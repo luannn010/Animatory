@@ -47,7 +47,7 @@ export function EditableSceneCard({
           </button>
           <button
             onClick={onEdit}
-            className="text-[11px] text-steel hover:text-ink transition-colors"
+            className="text-[11px] text-steel hover:text-ink transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]"
           >
             Edit
           </button>
