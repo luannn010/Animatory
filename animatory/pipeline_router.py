@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from animatory import entity_registry, scene_source
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
-from animatory.scene_parser import parse_episode, reparse_scene
+from animatory.scene_parser import parse_episode, reparse_scene, spellcheck_text
 from animatory.chat_engine import stream_chat, generate_title
 from animatory.voice_profiles import aggregate
 from sse_starlette.sse import EventSourceResponse
@@ -148,6 +148,10 @@ class ParseRequest(BaseModel):
 
 
 class SaveTextRequest(BaseModel):
+    text: str
+
+
+class SpellcheckRequest(BaseModel):
     text: str
 
 
@@ -423,6 +427,21 @@ async def get_scene_source(episode_id: str, chunk_id: str, scene_id: str):
         raise HTTPException(status_code=404, detail=f"Scene '{scene_id}' not found in chunk '{chunk_id}'")
     text = _text_payload(ep_dir, chunk_id, meta)["text"]
     return scene_source.locate(scene, text)
+
+
+@router.post("/episodes/{episode_id}/chunks/{chunk_id}/spellcheck")
+async def spellcheck_chunk(episode_id: str, chunk_id: str, body: SpellcheckRequest):
+    """Pre-parse proofread: return find/replace suggestions for the given text.
+
+    Operates on the text supplied in the request (the live editor buffer), so it
+    works before a chunk is parsed. Consults the episode's known names so proper
+    nouns aren't "corrected". Returns {"corrections": [...]}; persists nothing.
+    """
+    ep_dir = _processed_dir() / episode_id
+    _chunk_meta(ep_dir, chunk_id)  # 404 if episode/chunk unknown
+    known = entity_registry.load(episode_id, ep_dir).known_names()
+    corrections = await spellcheck_text(body.text, known)
+    return {"corrections": corrections}
 
 
 @router.get("/episodes/{episode_id}/entities")
