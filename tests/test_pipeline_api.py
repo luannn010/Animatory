@@ -730,3 +730,30 @@ async def test_scene_source_route_409_when_not_parsed(client, tmp_path, monkeypa
     cid = manifest["chunks"][0]["chunk_id"]
     r = await client.get(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{cid}_S01/source")
     assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_spellcheck_route_returns_corrections(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="sptest")
+    import json as _json
+    ep_dir = tmp_path / ep
+    manifest = _json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    fake = [{"find": "xin chao", "replace": "xin chào", "category": "word",
+             "rationale": "missing diacritics", "all_occurrences": True}]
+    with patch("animatory.pipeline_router.spellcheck_text", new_callable=AsyncMock) as m:
+        m.return_value = fake
+        r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/spellcheck",
+                              json={"text": "xin chao cac ban"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["corrections"][0]["replace"] == "xin chào"
+    # the supplied text is what gets proofread
+    assert m.await_args.args[0] == "xin chao cac ban"
+
+
+@pytest.mark.asyncio
+async def test_spellcheck_route_404_unknown_chunk(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="sp404")
+    r = await client.post(f"/pipeline/episodes/{ep}/chunks/NOPE/spellcheck", json={"text": "x"})
+    assert r.status_code == 404
