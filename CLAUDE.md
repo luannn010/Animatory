@@ -82,6 +82,32 @@ npm run build
 
 ---
 
+## Streaming Spell-Check (invariants — do not break)
+
+See `docs/superpowers/specs/2026-06-08-streaming-spellcheck-design.md`.
+
+- **Segment model:** the editor buffer is split into 5–7 boundary-safe
+  *segments* (paragraph boundaries, sentence fallback; default target 650
+  words/segment). Concatenating segment texts in order reproduces the document
+  byte-for-byte; each segment carries a `char_offset` (its start index in the
+  full document). Code: `animatory/spellcheck/chunker.py`.
+- **Finding schema (WS wire shape):**
+  `{ type: 'spelling'|'grammar'|'naming', original, suggestion, char_start,
+  char_end, reason }`. `char_*` are GLOBAL offsets into the full document;
+  `char_end` is exclusive (`text.slice(char_start, char_end) === original`).
+- **Global-offset rule:** applying a finding shifts every later unapplied
+  finding by `delta = suggestion.length - (char_end - char_start)`; "Accept all"
+  applies back-to-front; always verify `slice === original` (relocate or mark
+  stale on mismatch); overlapping findings keep the first in document order.
+  This logic lives in `frontend/src/spellcheck/offsets.ts` and is unit-tested.
+- **WS contract:** `ws .../pipeline/episodes/{ep}/chunks/{chunk}/spellcheck/ws`.
+  Client sends `{action:'start', document}`. Server streams `chunk_started`,
+  `chunk_findings` (global offsets, per segment), `naming_findings` (after all
+  segments), `complete`, and per-segment `error` (one bad segment never aborts
+  the stream). This route is additive — do not change existing contract routes.
+
+---
+
 ## Backend MVP
 
 ### Project Purpose
