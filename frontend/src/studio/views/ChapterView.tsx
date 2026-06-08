@@ -6,6 +6,7 @@ import {
   saveScenes, saveText, resetScenes, resetText, reparseScene, getSceneSource,
   type PipelineScene, type ScenePatch, type TextCorrection, type SceneSource,
 } from '../../api/pipeline'
+import { SpellCheck } from '../../spellcheck/SpellCheck'
 import {
   streamChat, listSessions, createSession, getSession, renameSession, deleteSession,
   type ChatMention, type ChatUsage, type ChatSessionMeta,
@@ -30,6 +31,7 @@ export function ChapterView() {
   const [textWordCount, setTextWordCount] = useState<number | null>(null)
   const [savingText, setSavingText] = useState(false)
   const [corrections, setCorrections] = useState<TextCorrection[]>([])
+  const [spellcheckOpen, setSpellcheckOpen] = useState(false)
 
   // Scenes state
   const [scenes, setScenes] = useState<PipelineScene[]>([])
@@ -373,6 +375,7 @@ export function ChapterView() {
             onChange={setText}
             onAcceptCorrection={acceptCorrection} onRejectCorrection={rejectCorrection}
             onSave={onSaveText} onReset={onResetText} onParse={onParse}
+            onOpenSpellcheck={() => setSpellcheckOpen(true)}
           />
 
           <section>
@@ -467,6 +470,16 @@ export function ChapterView() {
         >
           {chatEl}
         </SceneFocusPanel>
+      )}
+
+      {spellcheckOpen && (
+        <SpellCheck
+          episodeId={episodeId}
+          chunkId={chunkId}
+          initialText={text}
+          onApply={(corrected) => { setText(corrected); setSpellcheckOpen(false) }}
+          onClose={() => setSpellcheckOpen(false)}
+        />
       )}
     </div>
   )

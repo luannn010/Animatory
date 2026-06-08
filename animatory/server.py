@@ -106,6 +106,8 @@ app.add_middleware(
 app.include_router(studio_router)
 from animatory.pipeline_router import router as pipeline_router
 app.include_router(pipeline_router)
+from animatory.spellcheck.router import router as spellcheck_router
+app.include_router(spellcheck_router)
 
 
 @app.get("/health")

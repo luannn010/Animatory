@@ -376,24 +376,3 @@ async def test_two_phase_falls_back_to_single_pass(tmp_path, monkeypatch):
 
     data = json.loads(out.read_text(encoding="utf-8"))
     assert len(data["scenes"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_spellcheck_text_filters_non_substrings(tmp_path):
-    from animatory.scene_parser import spellcheck_text
-
-    async def fake_call(prompt, *, label, **kw):
-        return {"corrections": [
-            {"find": "mườ", "replace": "mười", "category": "word", "rationale": "typo", "all_occurrences": True},
-            {"find": "NOT IN TEXT", "replace": "x", "category": "word"},  # must be dropped
-            {"find": "", "replace": "y"},                                  # empty -> dropped
-            {"find": "lần", "replace": "lần", "category": "word"},         # no-op (find==replace) -> dropped
-        ]}
-
-    text = "thông minh gấp mườ lần"
-    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
-        out = await spellcheck_text(text, {"characters": [], "locations": []})
-
-    assert len(out) == 1
-    assert out[0]["find"] == "mườ" and out[0]["replace"] == "mười"
-    assert out[0]["category"] == "word" and out[0]["all_occurrences"] is True

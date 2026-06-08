@@ -9,3 +9,6 @@ export const USE_MOCK: boolean =
 // VITE_STUDIO_USE_MOCK=false to hit the real /studio backend.
 export const STUDIO_USE_MOCK: boolean =
   (import.meta.env.VITE_STUDIO_USE_MOCK ?? 'true') !== 'false'
+
+// WebSocket base derived from the HTTP API base (http->ws, https->wss).
+export const WS_BASE_URL: string = API_BASE_URL.replace(/^http/, 'ws')

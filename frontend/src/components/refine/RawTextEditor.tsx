@@ -12,11 +12,10 @@ interface Props {
   parsing: boolean
   parseProgress: { done: number; total: number } | null
   corrections: TextCorrection[]
-  spellchecking: boolean
   onChange: (next: string) => void
   onAcceptCorrection: (c: TextCorrection) => void
   onRejectCorrection: (c: TextCorrection) => void
-  onSpellcheck: () => void
+  onOpenSpellcheck: () => void
   onSave: () => void
   onReset: () => void
   onParse: () => void
@@ -25,7 +24,7 @@ interface Props {
 export function RawTextEditor(props: Props) {
   const {
     text, edited, dirty, saving, parsed, parsing, parseProgress,
-    corrections, spellchecking, onAcceptCorrection, onRejectCorrection, onSpellcheck,
+    corrections, onAcceptCorrection, onRejectCorrection, onOpenSpellcheck,
     onChange, onSave, onReset, onParse,
   } = props
   const [editing, setEditing] = useState(false)
@@ -103,11 +102,11 @@ export function RawTextEditor(props: Props) {
 
       <div className="flex items-center justify-end gap-2.5 mt-3">
         <button
-          onClick={onSpellcheck}
-          disabled={spellchecking || parsing || !text.trim()}
+          onClick={onOpenSpellcheck}
+          disabled={parsing || !text.trim()}
           className="mr-auto px-3 py-1.5 rounded-md border border-hairline text-steel text-xs hover:bg-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf] transition-colors"
         >
-          {spellchecking ? 'Checking…' : 'Spell check'}
+          Spell check
         </button>
         {edited && (
           <button

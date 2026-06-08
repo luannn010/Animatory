@@ -204,42 +204,6 @@ Scene text:
 {scene_text}
 ---"""
 
-_SPELLCHECK_TEMPLATE = """\
-You are a Vietnamese proofreader for a novel-to-animation script.
-Find SPELLING / TYPO errors in the chapter text below and propose corrections.
-Cover all of: character names, place/location names, ordinary words, and dialogue.
-
-Return ONLY valid JSON - no explanation, no markdown:
-
-{{
-  "corrections": [
-    {{
-      "find": "exact wrong substring copied VERBATIM from the text",
-      "replace": "corrected text",
-      "category": "name | location | word | dialogue",
-      "rationale": "short reason",
-      "all_occurrences": true
-    }}
-  ]
-}}
-
-Rules:
-- "find" MUST be an exact substring of the text (so it can be replaced literally).
-  Keep it short — just the wrong word/phrase, NOT a whole sentence.
-- Report ONLY real errors: typos, wrong/missing diacritics, mis-spelled or
-  INCONSISTENT names/locations. Do NOT rewrite style, grammar, or meaning.
-- Prefer the canonical spelling for known names/locations:
-  characters: {known_characters}
-  locations: {known_locations}
-- Set "all_occurrences" true when the same fix should apply everywhere in the text.
-- If there are no errors, return {{"corrections": []}}.
-
-Chapter text:
----
-{text}
----"""
-
-
 def _qwen_env(
     qwen_endpoint: str | None = None,
     model: str | None = None,
@@ -316,59 +280,6 @@ async def _call_qwen(
         f"{reason} for {label} after {retries} attempts "
         f"(last error: {type(last_exc).__name__}: {last_exc})"
     ) from last_exc
-
-
-async def spellcheck_text(
-    text: str,
-    known: dict,
-    *,
-    qwen_endpoint: str | None = None,
-    model: str | None = None,
-    max_retries: int | None = None,
-) -> list[dict]:
-    """Proofread the chapter text and return find/replace correction suggestions.
-
-    Each suggestion: {find, replace, category, rationale, all_occurrences}.
-    Suggestions whose `find` is not an exact substring of `text` are dropped, so
-    every returned correction is applyable (never stale on arrival)."""
-    endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
-        qwen_endpoint, model, max_retries
-    )
-    prompt = _SPELLCHECK_TEMPLATE.format(
-        text=text,
-        known_characters=", ".join(known["characters"]) or "(none yet)",
-        known_locations=", ".join(known["locations"]) or "(none yet)",
-    )
-    logger.info("[spellcheck] chars=%d endpoint=%s model=%s", len(text), endpoint, model_name)
-    data = await _call_qwen(
-        prompt, label="spellcheck", endpoint=endpoint, model_name=model_name,
-        retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
-    )
-
-    raw = data.get("corrections", [])
-    if not isinstance(raw, list):
-        return []
-    out: list[dict] = []
-    seen: set[tuple[str, str]] = set()
-    for c in raw:
-        if not isinstance(c, dict):
-            continue
-        find = c.get("find")
-        replace = c.get("replace")
-        if not find or find not in text or replace is None or replace == find:
-            continue  # must be an exact, applyable substring that actually changes something
-        key = (find, str(c.get("replace")))
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({
-            "find": find,
-            "replace": c.get("replace", ""),
-            "category": c.get("category", "word"),
-            "rationale": c.get("rationale", ""),
-            "all_occurrences": bool(c.get("all_occurrences", False)),
-        })
-    return out
 
 
 def _main_prompt(chunk_id: str, chunk_text: str, known: dict) -> str:
