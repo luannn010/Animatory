@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   getChunkScenes, getChunkText, parseEpisode,
-  saveScenes, saveText, resetScenes, resetText, reparseScene, getSceneSource, spellcheckText,
+  saveScenes, saveText, resetScenes, resetText, reparseScene, getSceneSource,
   type PipelineScene, type ScenePatch, type TextCorrection, type SceneSource,
 } from '../../api/pipeline'
+import { SpellCheck } from '../../spellcheck/SpellCheck'
 import {
   streamChat, listSessions, createSession, getSession, renameSession, deleteSession,
   type ChatMention, type ChatUsage, type ChatSessionMeta,
@@ -30,7 +31,7 @@ export function ChapterView() {
   const [textWordCount, setTextWordCount] = useState<number | null>(null)
   const [savingText, setSavingText] = useState(false)
   const [corrections, setCorrections] = useState<TextCorrection[]>([])
-  const [spellchecking, setSpellchecking] = useState(false)
+  const [spellcheckOpen, setSpellcheckOpen] = useState(false)
 
   // Scenes state
   const [scenes, setScenes] = useState<PipelineScene[]>([])
@@ -140,16 +141,6 @@ export function ChapterView() {
   }
   function rejectCorrection(c: TextCorrection) {
     setCorrections(cs => cs.filter(x => x !== c))
-  }
-  async function onSpellcheck() {
-    setSpellchecking(true)
-    try {
-      setCorrections(await spellcheckText(episodeId, chunkId, text))
-    } catch {
-      // leave existing corrections untouched on failure; the button re-enables
-    } finally {
-      setSpellchecking(false)
-    }
   }
   async function onSaveText() {
     setSavingText(true)
@@ -384,7 +375,7 @@ export function ChapterView() {
             onChange={setText}
             onAcceptCorrection={acceptCorrection} onRejectCorrection={rejectCorrection}
             onSave={onSaveText} onReset={onResetText} onParse={onParse}
-            spellchecking={spellchecking} onSpellcheck={onSpellcheck}
+            onOpenSpellcheck={() => setSpellcheckOpen(true)}
           />
 
           <section>
@@ -479,6 +470,16 @@ export function ChapterView() {
         >
           {chatEl}
         </SceneFocusPanel>
+      )}
+
+      {spellcheckOpen && (
+        <SpellCheck
+          episodeId={episodeId}
+          chunkId={chunkId}
+          initialText={text}
+          onApply={(corrected) => { setText(corrected); setSpellcheckOpen(false) }}
+          onClose={() => setSpellcheckOpen(false)}
+        />
       )}
     </div>
   )
