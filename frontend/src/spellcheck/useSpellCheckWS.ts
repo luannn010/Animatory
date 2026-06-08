@@ -73,15 +73,35 @@ export function useSpellCheckWS(episodeId: string, chunkId: string, document: st
 
   useEffect(() => {
     setState(initialState)
-    const url = `${WS_BASE_URL}/pipeline/episodes/${encodeURIComponent(episodeId)}/chunks/${encodeURIComponent(chunkId)}/spellcheck/ws`
-    const ws = new WebSocket(url)
-    wsRef.current = ws
-    ws.onopen = () => ws.send(JSON.stringify({ action: 'start', document }))
-    ws.onmessage = e => {
-      try { setState(s => reduce(s, JSON.parse(e.data as string) as ServerEvent)) } catch { /* ignore */ }
+    // `cancelled` distinguishes a real socket failure from our own teardown.
+    let cancelled = false
+    let ws: WebSocket | null = null
+    // Defer the connect by one macrotask. React StrictMode runs the effect
+    // mount→cleanup→mount in dev; deferring lets the throwaway mount's cleanup
+    // cancel before any socket opens, so we never (a) surface the aborted
+    // connect as a fatal "connection error", nor (b) kick off the backend's
+    // per-segment LLM work twice. Production (no StrictMode) connects once.
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      const url = `${WS_BASE_URL}/pipeline/episodes/${encodeURIComponent(episodeId)}/chunks/${encodeURIComponent(chunkId)}/spellcheck/ws`
+      ws = new WebSocket(url)
+      wsRef.current = ws
+      ws.onopen = () => { if (!cancelled) ws!.send(JSON.stringify({ action: 'start', document })) }
+      ws.onmessage = e => {
+        if (cancelled) return
+        try { setState(s => reduce(s, JSON.parse(e.data as string) as ServerEvent)) } catch { /* ignore */ }
+      }
+      ws.onerror = () => { if (!cancelled) setState(s => ({ ...s, fatal: s.fatal ?? 'connection error', done: true })) }
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (ws) {
+        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+        ws.close()
+      }
+      wsRef.current = null
     }
-    ws.onerror = () => setState(s => ({ ...s, fatal: s.fatal ?? 'connection error', done: true }))
-    return () => { ws.close(); wsRef.current = null }
     // Re-open only when the target chunk or document identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId, chunkId, document])

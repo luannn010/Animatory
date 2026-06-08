@@ -5,17 +5,26 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
 from animatory.scene_parser import parse_chunk, parse_episode, _slice_by_anchors
 
+# Beats-locator contract: the model emits anchors (locators) only; code lifts
+# every actual string from the source text below.
+# The quote-boundary rule: the dialogue beat is the quote ONLY; the speech tag
+# is its own narration beat (split at the ").
+FAKE_CHUNK_TEXT = 'Tu An nam tren giuong, han quat lon: "Me kiep!"'
 FAKE_SCENES_RESPONSE = {
     "chunk_id": "C001",
     "scenes": [
         {
             "scene_id": "C001_S01",
             "location": "Palace chamber",
-            "characters": ["Tu An", "Princess"],
             "shot_type": "medium",
-            "action": "Tu An lies bound to the bed",
-            "dialogue": [{"character": "Tu An", "line": "Me kiep!"}],
             "mood": "tense",
+            "beats": [
+                {"type": "narration", "start_anchor": "Tu An nam tren giuong,",
+                 "end_anchor": "han quat lon:"},
+                {"type": "dialogue", "start_anchor": '"Me kiep!"', "end_anchor": '"Me kiep!"',
+                 "speaker": "Tu An", "speaker_cue": "han quat lon",
+                 "speaker_confidence": "high", "emotion": "angry"},
+            ],
         }
     ],
 }
@@ -41,7 +50,7 @@ async def test_parse_chunk_writes_json(tmp_path):
 
         out = await parse_chunk(
             chunk_id="C001",
-            chunk_text="Me kiep, test text.",
+            chunk_text=FAKE_CHUNK_TEXT,
             episode_id="ep1",
             output_dir=tmp_path,
         )
@@ -50,7 +59,15 @@ async def test_parse_chunk_writes_json(tmp_path):
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["chunk_id"] == "C001"
     assert len(data["scenes"]) == 1
-    assert data["scenes"][0]["scene_id"] == "C001_S01"
+    scene = data["scenes"][0]
+    assert scene["scene_id"] == "C001_S01"
+    # text is LIFTED verbatim from the source, never regenerated
+    assert scene["narration"] == ["Tu An nam tren giuong, han quat lon:"]
+    assert scene["dialogue"][0]["line"] == '"Me kiep!"'
+    assert scene["dialogue"][0]["character"] == "Tu An"
+    # persist-both: attribution metadata survives onto the line
+    assert scene["dialogue"][0]["speaker_confidence"] == "high"
+    assert scene["dialogue"][0]["speaker_cue"] == "han quat lon"
 
 
 @pytest.mark.asyncio
@@ -73,7 +90,7 @@ async def test_parse_chunk_retries_on_bad_json(tmp_path):
         instance.post = AsyncMock(side_effect=side_effect)
         MockClient.return_value = instance
 
-        out = await parse_chunk("C001", "text", "ep1", tmp_path, max_retries=3)
+        out = await parse_chunk("C001", FAKE_CHUNK_TEXT, "ep1", tmp_path, max_retries=3)
 
     assert call_count == 3
     assert out.exists()
@@ -140,18 +157,22 @@ async def test_parse_episode_prefers_edited_text(tmp_path):
 
 from animatory import entity_registry as er
 
+ENRICHED_CHUNK_TEXT = 'Đêm xuống. đại cản bước vào "Quỳ."'
 ENRICHED_RESPONSE = {
     "chunk_id": "C001",
     "scenes": [
         {
             "scene_id": "C001_S01",
             "location": "cao palace",
-            "characters": ["đại cản"],
             "shot_type": "wide",
-            "action": "đại cản bước vào",
-            "dialogue": [{"character": "đại cản", "line": "Quỳ.", "emotion": "commanding", "intensity": "high"}],
-            "narration": ["Đêm xuống."],
             "mood": "tense",
+            "beats": [
+                {"type": "narration", "start_anchor": "Đêm xuống.", "end_anchor": "Đêm xuống."},
+                {"type": "action", "start_anchor": "đại cản bước vào", "end_anchor": "đại cản bước vào"},
+                {"type": "dialogue", "start_anchor": '"Quỳ."', "end_anchor": '"Quỳ."',
+                 "speaker": "đại cản", "speaker_cue": "đại cản bước vào",
+                 "speaker_confidence": "high", "emotion": "commanding", "intensity": "high"},
+            ],
         }
     ],
 }
@@ -176,7 +197,7 @@ async def test_parse_chunk_normalizes_and_grows_registry(tmp_path):
         instance.__aexit__ = AsyncMock(return_value=False)
         instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(ENRICHED_RESPONSE)))
         MockClient.return_value = instance
-        out = await parse_chunk("C001", "text", "ep1", tmp_path)
+        out = await parse_chunk("C001", ENRICHED_CHUNK_TEXT, "ep1", tmp_path)
 
     scene = json.loads(out.read_text(encoding="utf-8"))["scenes"][0]
     assert scene["location"] == "Cao's Palace"
@@ -226,11 +247,15 @@ async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
     )
     returned = {
         "scene_id": "WRONG_ID",  # model returns the wrong id — must be forced back
-        "location": "Hall", "characters": ["đại cản"], "shot_type": "wide",
-        "action": "đại cản bước vào",
-        "dialogue": [{"character": "đại cản", "line": "Quỳ.", "emotion": "commanding"}],
-        "narration": [], "mood": "tense",
+        "location": "Hall", "shot_type": "wide", "mood": "tense",
+        "beats": [
+            {"type": "narration", "start_anchor": "đại cản ra lệnh:", "end_anchor": "đại cản ra lệnh:"},
+            {"type": "dialogue", "start_anchor": '"Quỳ."', "end_anchor": '"Quỳ."',
+             "speaker": "đại cản", "speaker_cue": "đại cản ra lệnh",
+             "speaker_confidence": "high", "emotion": "commanding"},
+        ],
     }
+    chunk_text = 'Mo dau chuong. đại cản ra lệnh: "Quỳ." Roi im lang.'
     with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
@@ -238,13 +263,14 @@ async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
         instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(returned)))
         MockClient.return_value = instance
         scene = await reparse_scene(
-            chunk_id="C001", chunk_text="whole chunk text",
+            chunk_id="C001", chunk_text=chunk_text,
             anchor_scene={"scene_id": "C001_S02", "action": "old action"},
             registry=reg, scene_id="C001_S02",
         )
     assert scene["scene_id"] == "C001_S02"            # forced to requested id
     assert scene["characters"] == ["Đại Càn"]          # normalized
     assert scene["dialogue"][0]["character"] == "Đại Càn"
+    assert scene["dialogue"][0]["line"] == '"Quỳ."'    # lifted verbatim
     assert scene["dialogue"][0]["emotion"] == "commanding"
     assert len(reg.characters) == 1                     # NOT grown (no learn)
     assert not (tmp_path / "entities.json").exists()    # no registry save
@@ -255,8 +281,8 @@ async def test_reparse_scene_handles_scenes_wrapper():
     from animatory.scene_parser import reparse_scene
     reg = er.EntityRegistry(episode_id="ep1")
     wrapped = {"scenes": [{
-        "scene_id": "x", "location": "L", "characters": [], "shot_type": "wide",
-        "action": "a", "dialogue": [], "narration": [], "mood": "m",
+        "scene_id": "x", "location": "L", "shot_type": "wide", "mood": "m",
+        "beats": [{"type": "narration", "start_anchor": "Canh nay", "end_anchor": "o day."}],
     }]}
     with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
@@ -265,11 +291,12 @@ async def test_reparse_scene_handles_scenes_wrapper():
         instance.post = AsyncMock(return_value=_make_mock_response(json.dumps(wrapped)))
         MockClient.return_value = instance
         scene = await reparse_scene(
-            chunk_id="C001", chunk_text="t",
+            chunk_id="C001", chunk_text="Canh nay xay ra o day.",
             anchor_scene={"scene_id": "C001_S01"}, registry=reg, scene_id="C001_S01",
         )
     assert scene["scene_id"] == "C001_S01"
     assert scene["location"] == "L"
+    assert scene["narration"] == ["Canh nay xay ra o day."]
 
 
 @pytest.mark.asyncio
@@ -328,13 +355,10 @@ def test_slice_by_anchors_tolerates_missing_anchor():
     assert pairs and all(s for _, s in pairs)
 
 
-def _scene_obj(scene_id, who):
-    return {
-        "scene_id": scene_id, "location": "L", "characters": [who],
-        "shot_type": "wide", "action": "x",
-        "dialogue": [{"character": who, "line": "hi", "emotion": "neutral"}],
-        "narration": [], "mood": "m",
-    }
+def _beats_scene(start_anchor, end_anchor, *, btype="narration", **extra):
+    """A one-beat locator response (the new phase-2 contract)."""
+    beat = {"type": btype, "start_anchor": start_anchor, "end_anchor": end_anchor, **extra}
+    return {"location": "L", "shot_type": "wide", "mood": "m", "beats": [beat]}
 
 
 @pytest.mark.asyncio
@@ -350,7 +374,9 @@ async def test_two_phase_parse(tmp_path, monkeypatch):
         calls.append(label)
         if label.endswith("/segment"):
             return SEG
-        return _scene_obj(label, "A" if label.endswith("S01") else "B")
+        if label.endswith("S01"):
+            return _beats_scene("Alpha mo dau", "canh mot.")
+        return _beats_scene("Bravo tiep theo", "canh hai.")
 
     text = "Alpha mo dau canh mot. Bravo tiep theo canh hai."
     with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
@@ -358,6 +384,9 @@ async def test_two_phase_parse(tmp_path, monkeypatch):
 
     data = json.loads(out.read_text(encoding="utf-8"))
     assert [s["scene_id"] for s in data["scenes"]] == ["C001_S01", "C001_S02"]
+    # narration is lifted verbatim from each scene's own slice
+    assert data["scenes"][0]["narration"] == ["Alpha mo dau canh mot."]
+    assert data["scenes"][1]["narration"] == ["Bravo tiep theo canh hai."]
     assert sum(1 for c in calls if c.endswith("/segment")) == 1   # one segment call
     assert sum(1 for c in calls if not c.endswith("/segment")) == 2  # one extract per scene
 
@@ -369,10 +398,11 @@ async def test_two_phase_falls_back_to_single_pass(tmp_path, monkeypatch):
     async def fake_call(prompt, *, label, **kw):
         if label.endswith("/segment"):
             return {"segments": []}            # segmentation yields nothing
-        return {"scenes": [_scene_obj("C001_S01", "A")]}  # single-pass shape
+        return {"scenes": [{"scene_id": "C001_S01", **_beats_scene("Mot canh", "o day.")}]}
 
     with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
-        out = await parse_chunk("C001", "some text", "ep", tmp_path)
+        out = await parse_chunk("C001", "Mot canh don gian o day.", "ep", tmp_path)
 
     data = json.loads(out.read_text(encoding="utf-8"))
     assert len(data["scenes"]) == 1
+    assert data["scenes"][0]["narration"] == ["Mot canh don gian o day."]
