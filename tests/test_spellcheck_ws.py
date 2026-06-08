@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+import pytest
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from animatory.server import app
 from animatory.spellcheck.checker import Finding
@@ -18,6 +20,20 @@ def _collect(ws):
         if msg["type"] in ("complete", "error_fatal"):
             break
     return events
+
+
+def test_ws_rejects_invalid_first_message():
+    # A first message that isn't {action:'start'} must get error_fatal + close,
+    # rather than hanging or crashing the handshake.
+    with TestClient(app) as c:
+        with c.websocket_connect(
+            "/pipeline/episodes/ep1/chunks/C001/spellcheck/ws"
+        ) as ws:
+            ws.send_text(json.dumps({"action": "nope"}))
+            first = json.loads(ws.receive_text())
+            assert first["type"] == "error_fatal"
+            with pytest.raises(WebSocketDisconnect):
+                ws.receive_text()
 
 
 def test_ws_streams_chunk_then_naming_then_complete():
