@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 
 from animatory.scene_parser import _call_qwen, _qwen_env
@@ -11,8 +13,25 @@ logger = logging.getLogger(__name__)
 
 _TYPES = {"spelling", "grammar", "naming"}
 
-# segment-text hash -> list of segment-LOCAL findings (offsets relative to segment)
-_CACHE: dict[str, list["Finding"]] = {}
+# Bounded LRU: segment-text hash -> segment-LOCAL findings (offsets relative to
+# the segment). Capped so a long-lived server can't grow it without limit;
+# least-recently-used entries are evicted once SPELLCHECK_CACHE_MAX is exceeded.
+_CACHE_MAX = max(1, int(os.environ.get("SPELLCHECK_CACHE_MAX", "256")))
+_CACHE: "OrderedDict[str, list[Finding]]" = OrderedDict()
+
+
+def _cache_get(key: str) -> "list[Finding] | None":
+    if key not in _CACHE:
+        return None
+    _CACHE.move_to_end(key)  # mark most-recently-used
+    return _CACHE[key]
+
+
+def _cache_put(key: str, value: "list[Finding]") -> None:
+    _CACHE[key] = value
+    _CACHE.move_to_end(key)
+    while len(_CACHE) > _CACHE_MAX:
+        _CACHE.popitem(last=False)  # evict least-recently-used
 
 _TEMPLATE = """\
 You are a Vietnamese proofreader for a novel-to-animation script.
@@ -72,6 +91,18 @@ def _seg_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _closest_occurrence(haystack: str, needle: str, expected: int) -> int:
+    """Index of the occurrence of `needle` nearest `expected`, or -1 if absent.
+    Ties resolve to the earlier occurrence (deterministic)."""
+    best = -1
+    pos = haystack.find(needle)
+    while pos >= 0:
+        if best < 0 or abs(pos - expected) < abs(best - expected):
+            best = pos
+        pos = haystack.find(needle, pos + 1)
+    return best
+
+
 def _coerce_local(segment_text: str, raw: list) -> list[Finding]:
     """Validate raw LLM findings against the segment (local offsets).
     Keeps only findings whose span actually equals `original`."""
@@ -92,9 +123,11 @@ def _coerce_local(segment_text: str, raw: list) -> list[Finding]:
         if not original or suggestion is None or suggestion == original:
             continue
         # Trust the substring, not the model's arithmetic: relocate if the given
-        # span doesn't match, drop if the substring isn't present at all.
+        # span doesn't match, drop if the substring isn't present at all. When
+        # `original` repeats, bind to the occurrence closest to the model's
+        # `start` (mirrors the frontend relocate) rather than always the first.
         if segment_text[start:end] != original:
-            idx = segment_text.find(original)
+            idx = _closest_occurrence(segment_text, original, start)
             if idx < 0:
                 continue
             start, end = idx, idx + len(original)
@@ -109,9 +142,8 @@ async def check_segment(segment_text: str, *, char_offset: int, known: dict) -> 
     unchanged segment spends no tokens. Raises ValueError if the LLM call cannot
     be parsed after retries — the caller turns that into a per-segment error."""
     key = _seg_hash(segment_text)
-    if key in _CACHE:
-        local = _CACHE[key]
-    else:
+    local = _cache_get(key)
+    if local is None:
         endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env()
         prompt = _TEMPLATE.format(
             text=segment_text,
@@ -123,7 +155,7 @@ async def check_segment(segment_text: str, *, char_offset: int, known: dict) -> 
             retries=retries, timeout_s=timeout_s, enable_thinking=enable_thinking,
         )
         local = _coerce_local(segment_text, data.get("findings", []))
-        _CACHE[key] = local
+        _cache_put(key, local)
 
     return [
         Finding(f.type, f.original, f.suggestion,
