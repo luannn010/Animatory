@@ -4,10 +4,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Split points that preserve the exact original string: keep the delimiter on the
-# left piece so concatenating the pieces reproduces the input byte-for-byte.
-_PARA_RE = re.compile(r"(?<=\n\n)")          # boundary after a blank line
-_SENT_RE = re.compile(r"(?<=[.!?…])\s+")     # boundary after sentence punctuation
+# Split points that preserve the exact original string. Both are ZERO-WIDTH so
+# `re.split` removes no characters — concatenating the pieces reproduces the
+# input byte-for-byte. The sentence boundary sits between end punctuation and the
+# following whitespace, so the whitespace stays attached to the next piece (and
+# we never split things like "3.14" where the next char isn't whitespace).
+_PARA_RE = re.compile(r"(?<=\n\n)")            # boundary after a blank line
+_SENT_RE = re.compile(r"(?<=[.!?…])(?=\s)")    # boundary after sentence punctuation
 
 
 @dataclass(frozen=True)
