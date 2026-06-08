@@ -24,10 +24,58 @@ EMOTIONS = [
 ]
 INTENSITIES = ["low", "medium", "high"]
 
-_PROMPT_TEMPLATE = """\
+# Shared rules for the beats-locator contract. The model classifies and points;
+# code lifts every actual string from the source. No curly braces here so the
+# block is safe to concatenate into .format() templates.
+_BEAT_RULES = """\
+Hard rules (POINTER extraction — this is the whole point):
+- You output LOCATORS only — NEVER narration or dialogue TEXT. Each
+  start_anchor / end_anchor MUST be an exact substring copied from the text
+  above: do NOT paraphrase, translate, summarize, or fix typos. Anchors only
+  locate the beat; code lifts the real text.
+- Make each anchor long enough (4-8 words) to be UNIQUE within the text; if the
+  opening words repeat, extend the anchor until it is unambiguous.
+- Beats are CONSECUTIVE and cover the WHOLE text in order — no gaps, no overlap.
+  Connective / action text between quotes is its own narration or action beat.
+- Split at the quotation mark: text inside "..." is a dialogue beat; the speech
+  tag and everything outside the quotes is narration / action. Quote marks are
+  the reliable dialogue boundary in this text — anchor dialogue beats on the ".
+- Attribution is EVIDENCE-BASED, never positional. Assign a speaker only from a
+  speech tag (before OR after the quote: "X nói / đáp / mắng / quát / lạnh
+  giọng"), a vocative (a name being ADDRESSED implies a DIFFERENT speaker), or
+  unambiguous context. Do NOT assume speakers simply alternate. A reply to an
+  insult is the OTHER party — e.g. 'Mẹ kiếp, Tiêu Lan Nhi, ...' addressed TO
+  Tiêu Lan Nhi means the speaker is NOT Tiêu Lan Nhi. Resolve epithets to the
+  person ("bản quan / ngự sử / lão già" -> the censor; "tiểu công gia / thiếu
+  gia" -> the young noble; "giáo úy / tuần phòng" -> the patrol officer).
+- speaker_cue is a VERBATIM snippet from the text that justifies the speaker, or
+  "none". With no real cue, set speaker to "Unknown" and speaker_confidence
+  "low" — never collapse every line onto one name.
+- dialogue beats hold words spoken ALOUD only. Crowd / action beats, sound cues,
+  and inner thoughts ("trong lòng nghĩ", "thầm nghĩ", "tự nhủ", "nghĩ bụng") are
+  narration or action, never a dialogue beat.
+- emotion from the listed set (omit if unclear); intensity optional.
+"""
+
+# One beat object, shared verbatim across templates (braces doubled for .format).
+_BEAT_SCHEMA = """\
+    {{
+      "type": "narration | dialogue | action",
+      "start_anchor": "first 4-8 words of this beat, copied VERBATIM",
+      "end_anchor": "last 4-8 words of this beat, copied VERBATIM",
+      "speaker": "character name | Unknown  (dialogue beats only)",
+      "speaker_cue": "verbatim snippet justifying the speaker, or none",
+      "speaker_confidence": "high | low",
+      "emotion": "one of: {emotions}",
+      "intensity": "one of: {intensities}"
+    }}"""
+
+_PROMPT_TEMPLATE = (
+    """\
 You are a Vietnamese novel-to-animation production assistant.
-Extract a complete shot list from the following chapter text.
-Return ONLY valid JSON matching this schema - no explanation, no markdown:
+Extract a complete shot list from the chapter text below as SCENES, each made of
+ordered BEATS that tile the scene start-to-end. Each beat is a POINTER (anchors +
+labels), NOT text. Return ONLY valid JSON matching this schema - no markdown:
 
 {{
   "chunk_id": "{chunk_id}",
@@ -35,86 +83,56 @@ Return ONLY valid JSON matching this schema - no explanation, no markdown:
     {{
       "scene_id": "{chunk_id}_S01",
       "location": "string",
-      "characters": ["string"],
       "shot_type": "wide | medium | close-up | insert | POV",
-      "action": "string",
-      "dialogue": [
-        {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
-      ],
-      "narration": ["string"],
-      "mood": "string"
+      "mood": "string",
+      "beats": [
+"""
+    + _BEAT_SCHEMA
+    + """
+      ]
     }}
   ]
 }}
 
-Rules:
-- SPEAKER ATTRIBUTION IS THE #1 PRIORITY. Assign every dialogue line to the
-  character who actually says it:
-  * Use the speech tag next to the quote — it may come BEFORE or AFTER the line:
-    "X nói / đáp / hỏi / mắng / quát / hét / gầm lên / lạnh giọng / cười nói".
-  * In a back-and-forth, speakers ALTERNATE. Do NOT assign several consecutive
-    different lines to the same character unless the text explicitly says so.
-  * Resolve titles / epithets to the actual person, e.g. "bản quan / ngự sử
-    đương triều / lão già" (the lecturing official) → the censor character;
-    "tiểu công gia / thiếu gia" → the young noble; "giáo úy / tuần phòng" → the
-    patrol officer (a DISTINCT speaker). Reply to an insult is the OTHER party.
-  * NEVER default to repeating one name for everything. If a line's speaker is
-    genuinely unidentifiable, set "character" to "Unknown" — do not reuse a name
-    that happens to appear nearby.
-- "dialogue" = ONLY words spoken ALOUD. These are NOT dialogue — put them in
-  "narration" (or "action"), never as a spoken line with a character:
-  * crowd / action beats: "Cả đám lập tức vây quanh hắn", "hắn bị đánh tơi tả"
-  * sound cues / description: "một giọng cười lạnh vang lên"
-  * inner thoughts: "trong lòng nghĩ / mắng thầm", "thầm nghĩ", "tự nhủ",
-    "nghĩ bụng" — the character does NOT say these out loud.
-- Choose "emotion" from the listed set (omit if genuinely unclear); "intensity"
-  is optional.
+"""
+    + _BEAT_RULES
+    + """\
+- A long argument with several speakers should be split into MULTIPLE scenes
+  rather than one giant scene — this keeps attribution accurate.
 - Known names — use EXACTLY these spellings wherever they appear:
   characters: {known_characters}
   locations: {known_locations}
-- A long argument with several speakers should usually be split into multiple
-  scenes/beats rather than one giant scene — this keeps attribution accurate.
 
 Chapter text:
 ---
 {chunk_text}
----"""
+---""")
 
-_REPARSE_TEMPLATE = """\
+_REPARSE_TEMPLATE = (
+    """\
 You are a Vietnamese novel-to-animation production assistant.
 Re-extract a SINGLE scene from the chapter text below. You are CORRECTING one
-existing scene — fix mistakes: wrong speaker attribution, narration mistaken for
-dialogue (or vice versa), wrong character/location spelling, and emotions.
+existing scene — fix wrong speaker attribution and narration-vs-dialogue
+boundaries. Output the corrected scene as ordered BEATS that tile the scene; each
+beat is a POINTER (anchors + labels), NOT text.
 
-Return ONLY one scene as valid JSON (a single object, NOT an array, no markdown)
-matching this schema, keeping the SAME "scene_id":
+Return ONLY one JSON object (NOT an array, no markdown), keeping the SAME id:
 
 {{
   "scene_id": "{scene_id}",
   "location": "string",
-  "characters": ["string"],
   "shot_type": "wide | medium | close-up | insert | POV",
-  "action": "string",
-  "dialogue": [
-    {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
-  ],
-  "narration": ["string"],
-  "mood": "string"
+  "mood": "string",
+  "beats": [
+"""
+    + _BEAT_SCHEMA
+    + """
+  ]
 }}
 
-Rules:
-- SPEAKER ATTRIBUTION IS THE #1 FIX. Re-derive each line's speaker from its
-  speech tag (before OR after the quote: "X nói/đáp/mắng/quát/hét/lạnh giọng").
-  In an exchange speakers ALTERNATE — do NOT attribute consecutive different
-  lines to the same character. A reply to an insult/accusation is the OTHER
-  party, not the accuser. Resolve epithets: "bản quan / ngự sử / lão già" → the
-  censor; "tiểu công gia / thiếu gia" → the young noble; "giáo úy / tuần phòng"
-  → the patrol officer (a distinct speaker). If truly unknown, use "Unknown" —
-  never collapse everything onto one name.
-- "dialogue" holds ONLY words spoken ALOUD. Crowd/action beats, sound cues, and
-  inner thoughts ("trong lòng nghĩ/mắng thầm", "thầm nghĩ", "tự nhủ") are NOT
-  dialogue → move them to "narration". Do NOT invent a "Narrator" character.
-- Choose "emotion" from the listed set (omit if unclear); "intensity" is optional.
+"""
+    + _BEAT_RULES
+    + """\
 - Known names — use EXACTLY these spellings:
   characters: {known_characters}
   locations: {known_locations}
@@ -126,7 +144,7 @@ part of the chapter):
 Chapter text:
 ---
 {chunk_text}
----"""
+---""")
 
 
 # ── two-phase (segment → extract) templates ──────────────────────────────────
@@ -165,35 +183,28 @@ Chapter text:
 {chunk_text}
 ---"""
 
-_SCENE_EXTRACT_TEMPLATE = """\
+_SCENE_EXTRACT_TEMPLATE = (
+    """\
 You are a Vietnamese novel-to-animation production assistant.
-Extract ONE scene from the scene text below. Return ONLY one JSON object (NOT an
-array, no markdown), keeping the given "scene_id":
+Extract ONE scene from the scene text below as an ordered list of BEATS that tile
+the scene start-to-end. Each beat is a POINTER (anchors + labels), NOT text.
+Return ONLY one JSON object (NOT an array, no markdown), keeping the given id:
 
 {{
   "scene_id": "{scene_id}",
   "location": "string",
-  "characters": ["string"],
   "shot_type": "wide | medium | close-up | insert | POV",
-  "action": "string",
-  "dialogue": [
-    {{"character": "string", "line": "string", "emotion": "one of: {emotions}", "intensity": "one of: {intensities}"}}
-  ],
-  "narration": ["string"],
-  "mood": "string"
+  "mood": "string",
+  "beats": [
+"""
+    + _BEAT_SCHEMA
+    + """
+  ]
 }}
 
-Rules:
-- SPEAKER ATTRIBUTION is the priority: use speech tags (before OR after the
-  quote: "X nói/đáp/mắng/quát/hét/lạnh giọng"); speakers ALTERNATE in an
-  exchange; a reply to an accusation is the OTHER party. Resolve epithets
-  ("bản quan / ngự sử / lão già" -> the censor; "tiểu công gia / thiếu gia" ->
-  the young noble; "giáo úy / tuần phòng" -> the patrol officer). If a speaker
-  is unidentifiable use "Unknown" — never collapse everyone onto one name.
-- "dialogue" = ONLY words spoken ALOUD. Crowd/action beats, sound cues, and
-  inner thoughts ("trong lòng nghĩ/mắng thầm", "thầm nghĩ", "tự nhủ") go in
-  "narration", never as a spoken line.
-- Choose "emotion" from the listed set (omit if unclear); "intensity" optional.
+"""
+    + _BEAT_RULES
+    + """\
 - Hint for this scene — location: {hint_location}; characters: {hint_characters}.
 - Known names — use EXACTLY these spellings:
   characters: {known_characters}
@@ -202,7 +213,7 @@ Rules:
 Scene text:
 ---
 {scene_text}
----"""
+---""")
 
 def _qwen_env(
     qwen_endpoint: str | None = None,
@@ -335,6 +346,243 @@ def _slice_by_anchors(text: str, segments: list[dict]) -> list[tuple[dict, str]]
     return out
 
 
+# ── pointer-based beat resolution (the correctness guarantee) ────────────────
+#
+# The model emits ordered *locators* (anchors + labels), never prose. Code lifts
+# every actual string from the source, so narration/dialogue text is a pure
+# substring of the scene slice by construction — corruption is structurally
+# impossible, not merely validated away.
+
+_BEAT_PASSTHROUGH = (
+    "speaker", "speaker_cue", "speaker_confidence", "emotion", "intensity",
+)
+
+
+def _resolve_beats(scene_text: str, beats: list[dict]) -> list[dict]:
+    """Resolve each beat's verbatim anchors to ``[start, end)`` offsets in
+    ``scene_text`` and tile the whole scene with no gaps or overlaps.
+
+    Each returned beat carries its lifted ``text`` (an exact substring of the
+    source, source typos and all), its ``start``/``end`` offsets, and any
+    classified passthrough fields (speaker, emotion, ...). Gaps between beats are
+    recovered as inferred ``narration`` beats (``inferred: True``) rather than
+    dropped; a beat whose anchors cannot be located is flagged
+    (``beat_unresolved: True``) and the scene continues.
+
+    The resolved spans are contiguous and cover ``[0, len(scene_text))`` exactly,
+    so ``"".join(scene_text[b['start']:b['end']] for b in result) == scene_text``.
+    """
+    n = len(scene_text)
+
+    # Pass 1 — locate each beat via a single forward sweep (the cursor starts at
+    # the previous beat's resolved end, which enforces order and disambiguates
+    # repeated opening anchors).
+    raw: list[dict] = []
+    cursor = 0
+    for beat in beats:
+        sa = (beat.get("start_anchor") or "").strip()
+        ea = (beat.get("end_anchor") or "").strip()
+        unresolved = False
+
+        start = scene_text.find(sa, cursor) if sa else -1
+        if start == -1:
+            start = cursor
+            if sa:
+                unresolved = True
+
+        end: int | None = None
+        if ea:
+            e = scene_text.find(ea, start)
+            if e != -1:
+                end = e + len(ea)
+        if end is None or end <= start:
+            end = None  # unknown end — filled from the next beat's start below
+            if ea:
+                unresolved = True
+
+        raw.append({"beat": beat, "start": start, "end": end, "unresolved": unresolved})
+        cursor = max(cursor, (end if end is not None else start) + 1)
+
+    # Pass 2 — stitch resolved beats into a strictly contiguous tiling. Whitespace
+    # between beats is absorbed into the following beat; non-whitespace gaps are
+    # surfaced as inferred narration so no source text is ever lost.
+    out: list[dict] = []
+
+    def _emit(start: int, end: int, beat: dict | None, unresolved: bool) -> None:
+        fields = {"start": start, "end": end, "text": scene_text[start:end].strip()}
+        if beat is None:
+            fields["type"] = "narration"
+            fields["inferred"] = True
+        else:
+            fields["type"] = beat.get("type") or "narration"
+            for key in _BEAT_PASSTHROUGH:
+                if key in beat:
+                    fields[key] = beat[key]
+            if unresolved:
+                fields["beat_unresolved"] = True
+        out.append(fields)
+
+    pos = 0
+    for i, r in enumerate(raw):
+        start = r["start"]
+        next_start = raw[i + 1]["start"] if i + 1 < len(raw) else n
+
+        if start > pos:
+            gap = scene_text[pos:start]
+            if gap.strip():
+                _emit(pos, start, None, False)  # recover dropped source as a beat
+            # else: leading/inter-beat whitespace — absorb into this beat
+            pos = max(pos, start) if gap.strip() else pos
+            start = pos
+        else:
+            start = pos  # overlap or fallback: keep the first beat, clamp start
+
+        end = r["end"]
+        if end is None or end <= start:
+            end = next_start
+        if end > next_start:
+            end = next_start  # overlap into the next beat: keep first in order
+        if end < start:
+            end = start
+
+        _emit(start, end, r["beat"], r["unresolved"])
+        pos = end
+
+    # Trailing source past the last beat — recover it, never drop it.
+    if pos < n:
+        if scene_text[pos:].strip():
+            _emit(pos, n, None, False)
+        elif out:
+            out[-1]["end"] = n
+            out[-1]["text"] = scene_text[out[-1]["start"]:n].strip()
+
+    return out
+
+
+def _assemble_scene(
+    scene_id: str, scene_text: str, meta: dict, resolved: list[dict]
+) -> dict:
+    """Map resolved beats onto the external scene struct (pre-normalization).
+
+    Hybrid-by-field: ``narration[]``, ``dialogue[].line`` and ``speaker_cue`` are
+    lifted verbatim from the source; ``location``/``shot_type``/``mood``/
+    ``emotion``/``intensity``/``speaker`` are model-classified. ``action`` is the
+    concatenation of ``action``-type beats (also source-lifted). ``Unknown``
+    speakers stay on their line but are kept off the character roster.
+    """
+    narration: list[str] = []
+    dialogue: list[dict] = []
+    action_parts: list[str] = []
+    roster: list[str] = []
+    seen: set[str] = set()
+
+    def add_roster(name: str) -> None:
+        if name and name != "Unknown" and name not in seen:
+            seen.add(name)
+            roster.append(name)
+
+    for b in resolved:
+        text = b.get("text") or ""
+        if not text:
+            continue
+        btype = b.get("type")
+        if btype == "dialogue":
+            speaker = b.get("speaker") or "Unknown"
+            entry: dict = {"character": speaker, "line": text}
+            emotion = b.get("emotion")
+            if emotion in EMOTIONS:
+                entry["emotion"] = emotion
+            intensity = b.get("intensity")
+            if intensity in INTENSITIES:
+                entry["intensity"] = intensity
+            confidence = b.get("speaker_confidence")
+            entry["speaker_confidence"] = confidence if confidence in ("high", "low") else "low"
+            cue = b.get("speaker_cue") or "none"
+            if cue != "none" and cue not in scene_text:
+                cue = "none"  # honesty check: a cue must be a real source snippet
+            entry["speaker_cue"] = cue
+            dialogue.append(entry)
+            add_roster(speaker)
+        elif btype == "action":
+            action_parts.append(text)
+        else:  # narration, inferred gap-fill, or any unexpected label
+            narration.append(text)
+
+    for hint in meta.get("hint_characters") or []:
+        add_roster(hint)
+
+    return {
+        "scene_id": scene_id,
+        "location": meta.get("location") or "?",
+        "characters": roster,
+        "shot_type": meta.get("shot_type") or "medium",
+        "action": " ".join(action_parts),
+        "dialogue": dialogue,
+        "narration": narration,
+        "mood": meta.get("mood") or "",
+    }
+
+
+def _locate_span(corpus: str, beats: list[dict], cursor: int = 0) -> tuple[int, int]:
+    """Find the ``[start, end)`` region of ``corpus`` that the beats cover, forward
+    of ``cursor``. Uses the first beat's start_anchor and the last beat's
+    end_anchor; falls back to ``cursor``/end-of-corpus when an anchor is missing.
+    Used by the whole-corpus paths (single-pass, reparse) to carve a scene's slice
+    before handing it to ``_resolve_beats``."""
+    if not beats:
+        return cursor, len(corpus)
+    first = (beats[0].get("start_anchor") or "").strip()
+    last = (beats[-1].get("end_anchor") or "").strip()
+    start = corpus.find(first, cursor) if first else -1
+    if start == -1:
+        start = cursor
+    end = corpus.find(last, start) if last else -1
+    end = end + len(last) if end != -1 else len(corpus)
+    if end <= start:
+        end = len(corpus)
+    return start, end
+
+
+def _scenes_from_single_pass(chunk_id: str, chunk_text: str, scenes_meta: list) -> list[dict]:
+    """Map a single-pass response (scenes, each carrying beats) onto the external
+    struct. The resolution corpus is the WHOLE chunk: each scene's slice runs from
+    its first beat's anchor to the next scene's first anchor (a forward sweep that
+    keeps scenes in order), and beats are lifted from that slice."""
+    metas = [m for m in scenes_meta if isinstance(m, dict)]
+    if not metas:
+        return []
+
+    starts: list[int] = []
+    cursor = 0
+    for m in metas:
+        beats = m.get("beats") or []
+        first = (beats[0].get("start_anchor") or "").strip() if beats else ""
+        idx = chunk_text.find(first, cursor) if first else -1
+        if idx == -1:
+            idx = cursor
+        starts.append(idx)
+        cursor = max(cursor, idx + 1)
+
+    out: list[dict] = []
+    n = len(metas)
+    for i, m in enumerate(metas):
+        start = starts[i]
+        end = starts[i + 1] if i + 1 < n else len(chunk_text)
+        if end <= start:
+            end = len(chunk_text) if i + 1 == n else start + 1
+        slice_text = chunk_text[start:end]
+        resolved = _resolve_beats(slice_text, m.get("beats") or [])
+        scene_id = f"{chunk_id}_S{i + 1:02d}"
+        meta = {
+            "location": m.get("location"),
+            "shot_type": m.get("shot_type"),
+            "mood": m.get("mood"),
+            "hint_characters": [],
+        }
+        out.append(_assemble_scene(scene_id, slice_text, meta, resolved))
+    return out
+
+
 async def _extract_one_scene(
     scene_id: str, scene_text: str, seg: dict, known: dict, **qwen
 ) -> dict | None:
@@ -350,17 +598,25 @@ async def _extract_one_scene(
         known_locations=", ".join(known["locations"]) or "(none yet)",
     )
     try:
-        scene = await _call_qwen(prompt, label=scene_id, **qwen)
+        data = await _call_qwen(prompt, label=scene_id, **qwen)
     except ValueError:
         logger.warning("[two_phase] scene %s extraction failed; skipping", scene_id)
         return None
     # Tolerate a model that wraps the object in {"scenes": [...]}.
-    if isinstance(scene, dict) and isinstance(scene.get("scenes"), list) and scene["scenes"]:
-        scene = scene["scenes"][0]
-    if not isinstance(scene, dict):
+    if isinstance(data, dict) and isinstance(data.get("scenes"), list) and data["scenes"]:
+        data = data["scenes"][0]
+    if not isinstance(data, dict):
         return None
-    scene["scene_id"] = scene_id
-    return scene
+
+    beats = data.get("beats")
+    resolved = _resolve_beats(scene_text, beats if isinstance(beats, list) else [])
+    meta = {
+        "location": data.get("location") or seg.get("location"),
+        "shot_type": data.get("shot_type"),
+        "mood": data.get("mood"),
+        "hint_characters": seg.get("characters") or [],
+    }
+    return _assemble_scene(scene_id, scene_text, meta, resolved)
 
 
 async def _parse_chunk_two_phase(chunk_id: str, chunk_text: str, known: dict, **qwen) -> list[dict]:
@@ -417,9 +673,10 @@ async def parse_chunk(
     if two_phase:
         raw_scenes = await _parse_chunk_two_phase(chunk_id, chunk_text, known, **qwen)
     if not raw_scenes:
-        # Single-pass (default, and fallback if segmentation yields nothing).
+        # Single-pass (default, and fallback if segmentation yields nothing). The
+        # model points at beats over the whole chunk; code lifts every string.
         scenes_data = await _call_qwen(_main_prompt(chunk_id, chunk_text, known), label=chunk_id, **qwen)
-        raw_scenes = scenes_data.get("scenes", [])
+        raw_scenes = _scenes_from_single_pass(chunk_id, chunk_text, scenes_data.get("scenes", []))
 
     scenes = [registry.normalize_scene(s) for s in raw_scenes]
     registry.learn(scenes)
@@ -480,14 +737,26 @@ async def reparse_scene(
 
     # Accept a bare object, a list, or a {"scenes": [obj]} wrapper.
     if isinstance(data, list):
-        scene = data[0] if data else {}
+        obj = data[0] if data else {}
     elif isinstance(data, dict) and isinstance(data.get("scenes"), list):
-        scene = data["scenes"][0] if data["scenes"] else {}
+        obj = data["scenes"][0] if data["scenes"] else {}
     else:
-        scene = data
+        obj = data
+    if not isinstance(obj, dict):
+        obj = {}
 
-    scene = dict(scene)
-    scene["scene_id"] = scene_id  # always keep the requested id
+    # Carve the scene's slice from the whole chunk, then lift every string from it.
+    beats = obj.get("beats") if isinstance(obj.get("beats"), list) else []
+    start, end = _locate_span(chunk_text, beats)
+    slice_text = chunk_text[start:end]
+    resolved = _resolve_beats(slice_text, beats)
+    meta = {
+        "location": obj.get("location"),
+        "shot_type": obj.get("shot_type"),
+        "mood": obj.get("mood"),
+        "hint_characters": [],
+    }
+    scene = _assemble_scene(scene_id, slice_text, meta, resolved)
     return registry.normalize_scene(scene)
 
 
