@@ -25,15 +25,19 @@ CREATE TABLE IF NOT EXISTS runs (
     logs            TEXT,
     episode_id      TEXT,
     phase           TEXT,
-    track           TEXT
+    track           TEXT,
+    events          TEXT
 )
 """
 
 _COLUMNS = [
     "run_id", "agent_id", "status", "attempts", "started_at", "finished_at",
     "duration_s", "cost", "gpu_seconds", "tokens", "acceptance_passed",
-    "outputs", "error", "logs", "episode_id", "phase", "track",
+    "outputs", "error", "logs", "episode_id", "phase", "track", "events",
 ]
+
+# Columns added after the original schema — migrated in on init() for old DBs.
+_MIGRATIONS = [("events", "TEXT")]
 
 
 def _serialize(record: RunRecord) -> dict[str, Any]:
@@ -55,6 +59,7 @@ def _serialize(record: RunRecord) -> dict[str, Any]:
     d["episode_id"] = record.episode_id
     d["phase"] = record.phase
     d["track"] = record.track
+    d["events"] = json.dumps(record.events)
     return d
 
 
@@ -89,6 +94,13 @@ def _deserialize(row: tuple) -> RunRecord:
             d["logs"] = []
     else:
         d["logs"] = []
+    if d.get("events"):
+        try:
+            d["events"] = json.loads(d["events"])
+        except Exception:
+            d["events"] = []
+    else:
+        d["events"] = []
     if d.get("acceptance_passed") is not None:
         d["acceptance_passed"] = bool(d["acceptance_passed"])
     return RunRecord(**d)
@@ -101,6 +113,11 @@ class RunStore:
     async def init(self) -> None:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE_SQL)
+            for col, coltype in _MIGRATIONS:
+                try:
+                    await db.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")
+                except Exception:
+                    pass  # column already exists
             await db.commit()
 
     async def create(self, record: RunRecord) -> RunRecord:
@@ -142,6 +159,8 @@ class RunStore:
             if key == "outputs" and value is not None and not isinstance(value, str):
                 value = json.dumps([o.model_dump() if hasattr(o, "model_dump") else o for o in value])
             if key == "logs" and value is not None and not isinstance(value, str):
+                value = json.dumps(value)
+            if key == "events" and value is not None and not isinstance(value, str):
                 value = json.dumps(value)
             if key == "acceptance_passed" and value is not None:
                 value = int(value)
@@ -204,6 +223,11 @@ class InMemoryRunStore(RunStore):
     async def init(self) -> None:
         self._conn = await aiosqlite.connect(":memory:")
         await self._conn.execute(_CREATE_TABLE_SQL)
+        for col, coltype in _MIGRATIONS:
+            try:
+                await self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")
+            except Exception:
+                pass  # column already exists
         await self._conn.commit()
 
     async def _exec(self, sql: str, params=()) -> aiosqlite.Cursor:
@@ -249,6 +273,8 @@ class InMemoryRunStore(RunStore):
             if key == "outputs" and value is not None and not isinstance(value, str):
                 value = json.dumps([o.model_dump() if hasattr(o, "model_dump") else o for o in value])
             if key == "logs" and value is not None and not isinstance(value, str):
+                value = json.dumps(value)
+            if key == "events" and value is not None and not isinstance(value, str):
                 value = json.dumps(value)
             if key == "acceptance_passed" and value is not None:
                 value = int(value)

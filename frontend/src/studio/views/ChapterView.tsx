@@ -20,6 +20,8 @@ import { EditableSceneCard } from '../../components/refine/EditableSceneCard'
 import { SceneFocusPanel } from '../../components/refine/SceneFocusPanel'
 import { EntityRegistryPanel } from '../../components/refine/EntityRegistryPanel'
 import { VoiceProfilePanel } from '../../components/refine/VoiceProfilePanel'
+import { applyParseEvent, initialParseStream, PHASE_LABEL, type ParseStreamState } from '../parseStream'
+import type { RunEvent } from '../../types'
 
 export function ChapterView() {
   const { id = '', episodeId = '', chunkId = '' } = useParams()
@@ -67,6 +69,7 @@ export function ChapterView() {
   const [parseProgress, setParseProgress] = useState<{ done: number; total: number } | null>(null)
   const [skipped, setSkipped] = useState(0)
   const [profilesRefresh, setProfilesRefresh] = useState(0)
+  const [stream, setStream] = useState<ParseStreamState | null>(null)
   const parseEsRef = useRef<{ close(): void } | null>(null)
 
   const textDirty = text !== textBaseline
@@ -159,7 +162,8 @@ export function ChapterView() {
   async function onParse() {
     if (parsing) return
     if (parsed && !window.confirm('Re-parsing replaces the extracted scenes; saved scene edits will be discarded. Continue?')) return
-    setParsing(true); setParseProgress(null)
+    // Clear to skeletons: scenes + insight panels reset and reveal as events arrive.
+    setParsing(true); setParseProgress(null); setStream(initialParseStream())
     try {
       if (parsed && scenesEdited) await resetScenes(episodeId, chunkId).catch(() => {})
       const { run_id } = await parseEpisode(episodeId, [chunkId])
@@ -167,21 +171,27 @@ export function ChapterView() {
       parseEsRef.current = es
       es.addEventListener('message', (ev: Event) => {
         try {
-          const event = JSON.parse((ev as MessageEvent).data as string)
-          if (event.type === 'log') {
-            const m = /\[(\d+)\/(\d+)\]/.exec(event.data.message)
-            if (m) setParseProgress({ done: Number(m[1]), total: Number(m[2]) })
-          }
+          const event = JSON.parse((ev as MessageEvent).data as string) as RunEvent
           if (event.type === 'complete') {
-            es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
-            setProposals({}); loadScenes(); setProfilesRefresh(k => k + 1)
+            es.close(); parseEsRef.current = null
+            setParsing(false); setParseProgress(null); setStream(null)
+            setProposals({}); loadScenes(); setProfilesRefresh(k => k + 1)  // reconcile + refresh panels
+            return
           }
           if (event.type === 'status' && event.data?.status === 'failed') {
-            es.close(); parseEsRef.current = null; setParsing(false); setParseProgress(null)
+            es.close(); parseEsRef.current = null
+            setParsing(false); setParseProgress(null); setStream(null)
+            return
           }
-        } catch { /* ignore */ }
+          if (event.type === 'log') {
+            const m = /\[(\d+)\/(\d+)\]/.exec(event.data.message ?? '')
+            if (m) setParseProgress({ done: Number(m[1]), total: Number(m[2]) })
+          }
+          // Fold structured events into the progressive parse state.
+          setStream(prev => (prev ? applyParseEvent(prev, event, chunkId) : prev))
+        } catch { /* ignore malformed event */ }
       })
-    } catch { setParsing(false); setParseProgress(null) }
+    } catch { setParsing(false); setParseProgress(null); setStream(null) }
   }
 
   // --- Scene actions ---
@@ -381,7 +391,7 @@ export function ChapterView() {
           <section>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-ink">Scenes</h2>
-              {parsed && (
+              {parsed && !stream && (
                 <div className="flex items-center gap-2.5">
                   {scenesEdited && (
                     <button onClick={onResetScenes} className="text-xs text-steel hover:text-ink transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]">Reset</button>
@@ -392,9 +402,12 @@ export function ChapterView() {
                   </button>
                 </div>
               )}
+              {stream && (
+                <span className="text-[11px] text-[#3772cf] font-medium">{PHASE_LABEL[stream.phase]}</span>
+              )}
             </div>
 
-            {loading ? (
+            {(loading || (stream !== null && !stream.scenesReceived)) ? (
               <div className="space-y-2.5" aria-hidden="true">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="bg-canvas border border-hairline rounded-md p-4 space-y-2.5 animate-pulse">
@@ -407,7 +420,7 @@ export function ChapterView() {
                   </div>
                 ))}
               </div>
-            ) : !parsed ? (
+            ) : !parsed && !stream ? (
               <div className="rounded-lg border border-dashed border-hairline bg-canvas p-6 text-center text-sm text-steel">
                 This chapter hasn't been parsed yet.
                 <div className="mt-1 text-xs text-stone">Use "Parse this chapter" above to extract scenes.</div>
@@ -421,7 +434,7 @@ export function ChapterView() {
                   <div className="mb-2 text-[11px] text-brand-error">{reparseError}</div>
                 )}
                 <div className="space-y-2.5">
-                  {scenes.map(s => (
+                  {(stream?.scenesReceived ? stream.scenes : scenes).map(s => (
                     <EditableSceneCard
                       key={s.scene_id}
                       scene={s}
@@ -452,8 +465,16 @@ export function ChapterView() {
         <h2 className="text-sm font-semibold text-ink mb-1">Episode insights</h2>
         <p className="text-xs text-stone mb-3">Names &amp; voices span the whole episode, not just this chapter.</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <EntityRegistryPanel episodeId={episodeId} />
-          <VoiceProfilePanel episodeId={episodeId} refreshKey={profilesRefresh} />
+          <EntityRegistryPanel
+            episodeId={episodeId}
+            refreshKey={profilesRefresh}
+            liveStream={stream ? { active: true, characters: stream.characters, locations: stream.locations } : undefined}
+          />
+          <VoiceProfilePanel
+            episodeId={episodeId}
+            refreshKey={profilesRefresh}
+            liveProfiles={stream ? stream.profiles : null}
+          />
         </div>
       </section>
 

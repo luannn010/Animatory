@@ -63,12 +63,17 @@ export interface RunRecord {
   system_prompt: string
 }
 
-export type RunEventType = 'status' | 'log' | 'metric' | 'complete' | 'error'
+export type RunEventType =
+  | 'status' | 'log' | 'metric' | 'complete' | 'error'
+  // Structured parse-stream events (progressive scenes → entities-with-descriptions).
+  | 'phase' | 'chunk_parsed' | 'voice_profiles' | 'entity_described' | 'scene_summary'
 
 export interface RunEvent {
   type: RunEventType
   run_id: string
   timestamp: string
+  // `data` is the event payload; for the structured parse events it carries the
+  // raw payload as sent by the backend (scenes, entry, profiles, …).
   data: {
     status?: RunStatus
     message?: string
@@ -79,6 +84,17 @@ export interface RunEvent {
     acceptance_passed?: boolean
     outputs?: OutputArtifact[]
     error?: string
+    // parse-stream payload fields
+    phase?: string
+    total?: number
+    chunk_id?: string
+    index?: number
+    scenes?: unknown[]
+    profiles?: unknown[]
+    kind?: 'character' | 'location'
+    entry?: Record<string, unknown>
+    scene_id?: string
+    summary?: string
   }
 }
 

@@ -13,6 +13,7 @@ from pathlib import Path
 import httpx
 
 from animatory import entity_registry
+from animatory.voice_profiles import aggregate
 
 logger = logging.getLogger(__name__)
 
@@ -761,6 +762,94 @@ async def reparse_scene(
 
 
 ProgressFn = Callable[[int, int, str], Awaitable[None]]
+EventFn = Callable[[str, dict], Awaitable[None]]
+
+
+async def _enrich_episode(
+    episode_id: str,
+    episode_dir: Path,
+    qwen_endpoint: str | None,
+    on_progress: ProgressFn | None,
+    total: int,
+    on_event: EventFn | None = None,
+) -> None:
+    """Episode-scoped enrichment phases (Locations → Characters → Voices →
+    descriptive Scenes). Runs after every chunk is parsed; aggregates across the
+    whole episode so a description sees all of an entity's appearances. Best-effort
+    and additive: failures degrade per entity and never fail the parse run. Gated
+    by ``QWEN_ENRICH_ENTITIES`` (default on)."""
+    from animatory import entity_enrichment  # lazy — avoids an import cycle
+
+    endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(qwen_endpoint)
+    qwen = dict(
+        endpoint=endpoint, model_name=model_name, retries=retries,
+        timeout_s=timeout_s, enable_thinking=enable_thinking,
+    )
+
+    # Collect every parsed scene across the episode (edited-preferred), keeping the
+    # per-chunk doc + path so summaries can be written back into the right file.
+    manifest = json.loads((episode_dir / "manifest.json").read_text(encoding="utf-8"))
+    chunk_docs: list[tuple[Path, dict]] = []
+    all_scenes: list[dict] = []
+    for c in manifest.get("chunks", []):
+        cid = c["chunk_id"]
+        edited = episode_dir / f"{cid}_scenes.edited.json"
+        base = episode_dir / f"{cid}_scenes.json"
+        path = edited if edited.exists() else base
+        if not path.exists():
+            continue
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        chunk_docs.append((path, doc))
+        all_scenes.extend(doc.get("scenes", []) or [])
+
+    if not all_scenes:
+        return
+
+    # Voices are a pure aggregate (no LLM) — available the instant scenes exist,
+    # so stream them before the slower per-entity description pass.
+    if on_event is not None:
+        await on_event("voice_profiles", {"profiles": aggregate(all_scenes)})
+        await on_event("phase", {"phase": "describing"})
+
+    registry = entity_registry.load(episode_id, episode_dir)
+    if on_progress is not None:
+        await on_progress(total, total, "entity descriptions")
+
+    async def _on_entity(kind: str, entry: dict) -> None:
+        if on_event is not None:
+            singular = "character" if kind == "characters" else "location"
+            await on_event("entity_described", {"kind": singular, "entry": entry})
+
+    await entity_enrichment.enrich_entities(
+        registry, all_scenes, call_fn=_call_qwen, qwen=qwen, on_entity=_on_entity,
+    )
+    entity_registry.save(registry, episode_dir, now=datetime.now(timezone.utc).isoformat())
+    logger.info("[enrich] episode=%s described %d character(s), %d location(s)",
+                episode_id, len(registry.characters), len(registry.locations))
+
+    # Descriptive Scenes: a grounded one-line summary per scene, written back.
+    if on_progress is not None:
+        await on_progress(total, total, "scene summaries")
+    if on_event is not None:
+        await on_event("phase", {"phase": "summaries"})
+    for path, doc in chunk_docs:
+        scenes = doc.get("scenes", []) or []
+        summaries = await entity_enrichment.describe_scenes(scenes, call_fn=_call_qwen, qwen=qwen)
+        if not summaries:
+            continue
+        changed = False
+        for s in scenes:
+            sid = s.get("scene_id")
+            if sid in summaries:
+                s["summary"] = summaries[sid]
+                changed = True
+                if on_event is not None:
+                    await on_event("scene_summary", {"scene_id": sid, "summary": summaries[sid]})
+        if changed:
+            path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 async def parse_episode(
@@ -769,12 +858,18 @@ async def parse_episode(
     chunk_ids: list[str] | None = None,
     qwen_endpoint: str | None = None,
     on_progress: ProgressFn | None = None,
+    on_event: EventFn | None = None,
 ) -> list[Path]:
     """Parse all (or selected) chunks in episode_dir. Returns list of written paths.
 
     If ``on_progress`` is given it is awaited with ``(done, total, chunk_id)``:
     once at the start as ``(0, total, "")`` and after each chunk completes. This
     drives the live progress bar/logs in the UI (progress == chunks done / total).
+
+    If ``on_event`` is given it is awaited with ``(type, payload)`` for structured
+    streaming: ``phase``, ``chunk_parsed`` (a chunk's scenes), then the enrichment
+    events (``voice_profiles``, ``entity_described``, ``scene_summary``). It drives
+    the progressive parse UI; ``on_progress`` continues to drive the log/progress bar.
     """
     manifest_path = episode_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -791,6 +886,8 @@ async def parse_episode(
     )
     if on_progress is not None:
         await on_progress(0, total, "")
+    if on_event is not None:
+        await on_event("phase", {"phase": "scenes", "total": total})
 
     results = []
     for i, c in enumerate(chunks_to_parse, 1):
@@ -811,6 +908,22 @@ async def parse_episode(
         results.append(path)
         if on_progress is not None:
             await on_progress(i, total, c["chunk_id"])
+        if on_event is not None:
+            # Reveal this chunk's scenes the moment they're written.
+            try:
+                scenes = json.loads(path.read_text(encoding="utf-8")).get("scenes", [])
+            except (json.JSONDecodeError, OSError):
+                scenes = []
+            await on_event("chunk_parsed", {
+                "chunk_id": c["chunk_id"], "index": i, "total": total, "scenes": scenes,
+            })
 
     logger.info("[parse_episode] episode=%s done: wrote %d file(s)", episode_id, len(results))
+
+    if os.environ.get("QWEN_ENRICH_ENTITIES", "1") == "1":
+        try:
+            await _enrich_episode(episode_id, episode_dir, qwen_endpoint, on_progress, total, on_event)
+        except Exception as exc:  # noqa: BLE001 — enrichment is additive, never fatal
+            logger.warning("[parse_episode] episode=%s enrichment skipped: %r", episode_id, exc)
+
     return results

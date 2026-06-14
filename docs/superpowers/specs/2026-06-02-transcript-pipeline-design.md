@@ -237,11 +237,112 @@ Chapter text:
       "dialogue": [
         {"character": "Tu An", "line": "Mẹ kiếp, mỹ nhân cô nhận nhầm người rồi..."}
       ],
-      "mood": "tense, darkly comedic"
+      "mood": "tense, darkly comedic",
+      "summary": "Bound on the bed, Tu An faces the scissors-wielding princess."
     }
   ]
 }
 ```
+
+`summary` is an optional one-line storyboard caption added by the enrichment
+pass (below); it is absent until enrichment runs.
+
+---
+
+## Entity enrichment phases (descriptive parsing)
+
+The scene parser lifts **verbatim** text via anchored beats. A *description* is
+the opposite kind of data — a *synthesis* across every appearance of an entity,
+grounded in but not a verbatim slice of the source — so it cannot be
+anchor-extracted and needs the **whole episode**, not one chunk. Enrichment is
+therefore a set of episode-scoped phases that run **after every chunk is parsed**
+(at the end of `parse_episode`), in order, aggregating across all parsed chunks:
+
+```
+Locations  → structured background description per location
+Characters → structured reference-sheet description per character
+Voices     → per-character voice profile (LLM register/tone/pace + aggregate stats)
+Scenes     → one grounded `summary` per scene, written back into C0NN_scenes.json
+```
+
+Code: `animatory/entity_enrichment.py` (`build_appearance_index`,
+`enrich_entities`, `describe_scenes`), wired in `animatory/scene_parser.py`
+(`_enrich_episode`). The verbatim beat engine is unchanged — enrichment layers on
+top of it.
+
+### `entities.json` schema (extended, backward-compatible)
+
+Old name-only registries (`{canonical, aliases}`) still load unchanged; the
+blocks below are added lazily by enrichment. `char_end`-style verbatim guarantees
+do **not** apply here — these fields are synthesized.
+
+```jsonc
+// character
+{ "canonical": "Từ An", "aliases": [],
+  "appears_in": ["C001_S01"],
+  "description": { "summary": "", "appearance": "", "attire": "",
+                   "age_build": "", "palette": "" },
+  "voice": { "register": "", "tone": "", "pace": "",
+             "dominant_emotion": "", "dominant_intensity": "", "line_count": 0 },
+  "generated": true }
+// location
+{ "canonical": "Phòng công chúa", "aliases": [],
+  "appears_in": ["C001_S01"],
+  "description": { "summary": "", "setting": "", "lighting": "",
+                   "time_variants": [] },
+  "generated": true }
+```
+
+### Rules
+
+- **Evidence-only.** Each entity is described from a bounded bundle of snippets
+  lifted from the scenes it appears in. The prompts forbid inventing detail the
+  snippets don't support — an unsupported field stays empty, never hallucinated.
+- **Fill-empty merge.** Re-running enrichment fills only empty description /
+  authored-voice fields, so prior work and manual edits survive. Objective voice
+  stats (`dominant_*`, `line_count` from `voice_profiles.aggregate`) and
+  `appears_in` always refresh — they are computed, not authored.
+- **Human edits win.** A `PUT /entities` whose description/voice differs from disk
+  flips that entry's `generated` to `false`; subsequent auto-enrichment skips its
+  authored fields (override with `force`).
+- **Additive & non-fatal.** Enrichment failure (one entity or the whole pass)
+  is logged and skipped — it never fails the parse run.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QWEN_ENRICH_ENTITIES` | `1` | Run the enrichment phases automatically after parse. `0` to disable. |
+
+The `PUT /pipeline/episodes/{id}/entities` request/response carry the
+`description`, `voice`, `appears_in`, and `generated` blocks so the studio
+"Names & locations" panel can display and edit them.
+
+### Streaming the enrichment (parse-run events)
+
+The parse run streams its phases live so the UI reveals output progressively
+instead of all-at-once on completion. `parse_episode`/`_enrich_episode` take an
+`on_event(type, payload)` callback (alongside `on_progress`); the parse route
+appends each event to a new `RunRecord.events` channel (an `events` JSON column on
+the runs table, diffed and relayed by `GET /runs/{run_id}/stream` exactly like
+`logs`). Each is emitted as its own **named SSE event**:
+
+| event | when | payload |
+|---|---|---|
+| `phase` | each phase boundary | `{phase: 'scenes'|'describing'|'summaries', total?}` |
+| `chunk_parsed` | after a chunk's scenes are written | `{chunk_id, index, total, scenes[]}` |
+| `voice_profiles` | once, after scenes (pure aggregate) | `{profiles[]}` |
+| `entity_described` | per character/location merged | `{kind: 'character'|'location', entry}` |
+| `scene_summary` | per scene after summaries | `{scene_id, summary}` |
+
+The existing `status`/`log`/`done` events (and the `[done/total]` progress tag)
+are unchanged — the structured events are additive, and consumers that don't know
+them ignore them. `enrich_entities` takes an `on_entity` callback so each merged
+entity is streamed the moment its description lands. Frontend: `streamRun`
+(`api/client.ts`) relays the new events; the studio `ChapterView` folds them via a
+pure reducer (`studio/parseStream.ts`) — clear-to-skeletons on start, reveal the
+chunk's scene cards on `chunk_parsed`, stream rows into the Names & locations and
+Character-voices panels, then reconcile with a fetch on `done`.
 
 ---
 

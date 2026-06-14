@@ -58,6 +58,7 @@ export interface PipelineScene {
   dialogue: SceneDialogue[]
   mood: string
   narration?: string[]
+  summary?: string | null  // synthesized storyboard caption (enrichment phase)
 }
 
 export interface ChunkScenes {
@@ -216,9 +217,38 @@ export async function resetScenes(episodeId: string, chunkId: string): Promise<C
   return jsonOrThrow<ChunkScenes>(res, 'resetScenes')
 }
 
+export interface CharacterDescription {
+  summary: string
+  appearance: string
+  attire: string
+  age_build: string
+  palette: string
+}
+
+export interface LocationDescription {
+  summary: string
+  setting: string
+  lighting: string
+  time_variants: string[]
+}
+
+export interface CharacterVoice {
+  register: string
+  tone: string
+  pace: string
+  dominant_emotion: string
+  dominant_intensity: string
+  line_count: number
+}
+
 export interface EntityEntry {
   canonical: string
   aliases: string[]
+  // Structured enrichment blocks (optional; absent on un-enriched names).
+  description?: CharacterDescription | LocationDescription | null
+  voice?: CharacterVoice | null
+  appears_in?: string[]
+  generated?: boolean
 }
 
 export interface EntityRegistry {
@@ -254,6 +284,7 @@ export async function saveEntities(
   episodeId: string,
   body: { characters: EntityEntry[]; locations: EntityEntry[] },
 ): Promise<EntityRegistry> {
+  // EntityEntry carries the structured description/voice blocks so edits persist.
   const res = await fetch(`${episodeBase(episodeId)}/entities`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
