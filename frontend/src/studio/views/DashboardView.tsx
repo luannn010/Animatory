@@ -16,7 +16,7 @@ export function DashboardView() {
 
   async function newProject() {
     const created = await studioApi.createProject()
-    navigate(phasePath(created.id, 'parse'))
+    navigate(phasePath(created.id, 'script'))
   }
 
   return (

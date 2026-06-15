@@ -24,10 +24,10 @@ export function PhaseStepperBar({ project, current, onRename }: Props) {
   return (
     <div className="flex items-center gap-1 border-b border-hairline bg-canvas px-2 -mx-8 -mt-8 mb-8 h-12">
       {PHASE_ORDER.map((phase, i) => {
-        const status = project.phases[phase]
+        const status = project.gates[phase]
         const isCurrent = phase === current
         const reachable = isPhaseReachable(project, phase)
-        const done = status === 'complete'
+        const done = status === 'passed'
         return (
           <div key={phase} className="flex items-center">
             {i > 0 && <span className="text-hairline px-1 text-xs">›</span>}

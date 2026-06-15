@@ -133,6 +133,66 @@ async def test_parse_episode_processes_all_chunks(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_parse_episode_runs_enrichment_after_chunks(tmp_path, monkeypatch):
+    monkeypatch.setenv("QWEN_ENRICH_ENTITIES", "1")
+    ep_dir = tmp_path / "ep1"
+    ep_dir.mkdir()
+    (ep_dir / "C001.txt").write_text("body.", encoding="utf-8")
+    (ep_dir / "manifest.json").write_text(json.dumps({
+        "source_file": "ep1.txt", "chunk_count": 1,
+        "chunks": [{"chunk_id": "C001", "file": "C001.txt", "char_start": 0, "char_end": 5}],
+    }), encoding="utf-8")
+
+    # Stand in for parse_chunk: write a scene file + learn the entity, as the real one does.
+    async def fake_parse_chunk(*, chunk_id, chunk_text, episode_id, output_dir, **kw):
+        reg = er.load(episode_id, output_dir)
+        scene = {"scene_id": f"{chunk_id}_S01", "location": "Phòng", "characters": ["Từ An"],
+                 "shot_type": "medium", "action": "Từ An đứng.", "dialogue": [], "narration": [], "mood": ""}
+        reg.learn([scene]); er.save(reg, output_dir, now="2026-06-04T00:00:00Z")
+        p = output_dir / f"{chunk_id}_scenes.json"
+        p.write_text(json.dumps({"chunk_id": chunk_id, "scenes": [scene]}, ensure_ascii=False), encoding="utf-8")
+        return p
+
+    async def fake_enrich(reg, scenes, *, call_fn, qwen, force=False, on_entity=None):
+        reg.merge_descriptions("characters", "Từ An", description={"summary": "a censor"})
+        return reg
+
+    async def fake_describe(scenes, *, call_fn, qwen):
+        return {s["scene_id"]: "He stands." for s in scenes}
+
+    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
+         patch("animatory.entity_enrichment.enrich_entities", side_effect=fake_enrich), \
+         patch("animatory.entity_enrichment.describe_scenes", side_effect=fake_describe):
+        await parse_episode("ep1", ep_dir)
+
+    reg = er.load("ep1", ep_dir)
+    tu_an = next(e for e in reg.characters if e["canonical"] == "Từ An")
+    assert tu_an["description"]["summary"] == "a censor"          # enrichment ran + saved
+    scene = json.loads((ep_dir / "C001_scenes.json").read_text(encoding="utf-8"))["scenes"][0]
+    assert scene["summary"] == "He stands."                       # summary written back
+
+
+@pytest.mark.asyncio
+async def test_parse_episode_enrichment_can_be_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("QWEN_ENRICH_ENTITIES", "0")
+    ep_dir = tmp_path / "ep1"
+    ep_dir.mkdir()
+    (ep_dir / "C001.txt").write_text("body.", encoding="utf-8")
+    (ep_dir / "manifest.json").write_text(json.dumps({
+        "source_file": "ep1.txt", "chunk_count": 1,
+        "chunks": [{"chunk_id": "C001", "file": "C001.txt", "char_start": 0, "char_end": 5}],
+    }), encoding="utf-8")
+
+    async def fake_parse_chunk(*, chunk_id, chunk_text, episode_id, output_dir, **kw):
+        return output_dir / f"{chunk_id}_scenes.json"
+
+    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
+         patch("animatory.scene_parser._enrich_episode", new_callable=AsyncMock) as mock_enrich:
+        await parse_episode("ep1", ep_dir)
+    mock_enrich.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_parse_episode_prefers_edited_text(tmp_path):
     ep_dir = tmp_path / "ep1"
     ep_dir.mkdir()

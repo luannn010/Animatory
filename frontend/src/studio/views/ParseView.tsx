@@ -43,7 +43,7 @@ export function ParseView() {
 
   return (
     <div className="max-w-5xl">
-      <PhaseStepperBar project={project} current="parse" onRename={rename} />
+      <PhaseStepperBar project={project} current="script" onRename={rename} />
 
       <p className="text-[11px] font-semibold uppercase tracking-wider text-[#3772cf] font-mono mb-0.5">Phase 1</p>
       <h1 className="text-xl font-semibold text-ink tracking-tight">Script Parsing</h1>

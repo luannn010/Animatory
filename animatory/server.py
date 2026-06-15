@@ -290,6 +290,7 @@ async def stream_run(run_id: str):
     async def event_generator():
         last_status = None
         last_log_count = 0
+        last_event_count = 0
         terminal = {"done", "failed"}
 
         while True:
@@ -307,6 +308,13 @@ async def stream_run(run_id: str):
             for msg in logs[last_log_count:]:
                 yield {"event": "log", "data": json.dumps({"message": msg})}
             last_log_count = len(logs)
+
+            # Structured events (parse stream): each carries its own named event
+            # type so the client can drive a progressive UI alongside the log feed.
+            events = record.events or []
+            for ev in events[last_event_count:]:
+                yield {"event": ev.get("type", "event"), "data": json.dumps(ev.get("payload", {}), ensure_ascii=False)}
+            last_event_count = len(events)
 
             if current_status in terminal:
                 yield {"event": "done", "data": record.model_dump_json()}
