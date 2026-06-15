@@ -23,6 +23,8 @@ dependencies = [
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "pytest-timeout>=2.3.0",
     "anyio[trio]>=4.4.0",
 ]
 
@@ -35,3 +37,15 @@ packages = ["animatory"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Per-test guard so a genuinely hung test fails fast instead of stalling CI.
+# (The known interpreter-shutdown hang is handled separately in tests/conftest.py.)
+timeout = 120
+
+[tool.coverage.run]
+source = ["animatory"]
+branch = true
+omit = ["animatory/cli.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

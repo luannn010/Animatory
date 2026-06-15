@@ -21,3 +21,25 @@ async def client():
             base_url="http://test",
         ) as c:
             yield c
+
+
+# ── CI: force a clean process exit ───────────────────────────────────────────
+# Importing the FastAPI app spins up a non-daemon aiosqlite/uvicorn thread that
+# keeps the interpreter alive *after* tests finish, so the process hangs at
+# shutdown (results already printed, exit code already decided). That stalls CI
+# until the job times out. Gated behind PYTEST_FORCE_EXIT so local runs are
+# unaffected; coverage/reports are already written by `pytest_unconfigure`.
+_EXIT_STATUS = {"code": 0}
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    _EXIT_STATUS["code"] = int(exitstatus)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):  # noqa: ARG001
+    if os.environ.get("PYTEST_FORCE_EXIT") == "1":
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(_EXIT_STATUS["code"])
