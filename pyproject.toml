@@ -38,8 +38,11 @@ packages = ["animatory"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 # Per-test guard so a genuinely hung test fails fast instead of stalling CI.
-# (The known interpreter-shutdown hang is handled separately in tests/conftest.py.)
+# (The interpreter-shutdown hang is fixed at the source in tests/conftest.py.)
 timeout = 120
+# Coverage is configured here (single source of truth); CI just runs `pytest`.
+# `--cov` with no arg uses [tool.coverage.run].source below.
+addopts = "--cov --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
 source = ["animatory"]
