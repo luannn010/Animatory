@@ -1,5 +1,5 @@
 // frontend/src/components/refine/EntityRegistryPanel.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   getEntities, saveEntities,
   type CharacterDescription, type CharacterVoice, type EntityEntry,
@@ -43,7 +43,7 @@ const VOICE_FIELDS: [keyof CharacterVoice, string][] = [
   ['register', 'Register'], ['tone', 'Tone'], ['pace', 'Pace'],
 ]
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-[10px] font-medium text-stone">{label}</span>
@@ -94,7 +94,7 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
               ) : (
                 <ul className="space-y-1.5">
                   {list.map((e, i) => (
-                    <li key={i} className="rounded-md border border-hairline bg-surface/40 px-2.5 py-1.5">
+                    <li key={e.canonical || i} className="rounded-md border border-hairline bg-surface/40 px-2.5 py-1.5">
                       <div className="text-xs font-medium text-ink">{e.canonical}</div>
                       {descSummary(e) && <div className="text-[11px] text-stone truncate">{descSummary(e)}</div>}
                     </li>
@@ -160,7 +160,7 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
     const summary = desc?.summary?.trim() || ''
     const voice = e.voice
     return (
-      <div key={i} className="rounded-md border border-hairline bg-surface/40">
+      <div key={e.canonical || i} className="rounded-md border border-hairline bg-surface/40">
         <div className="flex gap-1.5 p-1.5">
           <button onClick={() => toggle(key)} aria-label={expanded ? 'Collapse' : 'Expand description'}
             aria-expanded={expanded}

@@ -26,6 +26,10 @@ export const PHASE_LABEL: Record<ParsePhase, string> = {
   summaries: 'Writing scene summaries…',
 }
 
+function isParsePhase(v: unknown): v is ParsePhase {
+  return typeof v === 'string' && v in PHASE_LABEL
+}
+
 function upsert(list: EntityEntry[], entry: EntityEntry): EntityEntry[] {
   const i = list.findIndex(e => e.canonical === entry.canonical)
   if (i === -1) return [...list, entry]
@@ -40,12 +44,14 @@ export function applyParseEvent(state: ParseStreamState, event: RunEvent, chunkI
   const d = event.data
   switch (event.type) {
     case 'phase':
-      return d.phase ? { ...state, phase: d.phase as ParsePhase } : state
+      // Only accept known phase ids — a diverged/typoed backend value would
+      // otherwise leave PHASE_LABEL[stream.phase] undefined in the UI.
+      return isParsePhase(d.phase) ? { ...state, phase: d.phase } : state
     case 'chunk_parsed':
       if (d.chunk_id !== chunkId) return state
-      return { ...state, scenes: (d.scenes as PipelineScene[]) ?? [], scenesReceived: true }
+      return { ...state, scenes: Array.isArray(d.scenes) ? (d.scenes as PipelineScene[]) : [], scenesReceived: true }
     case 'voice_profiles':
-      return { ...state, profiles: (d.profiles as VoiceProfile[]) ?? [] }
+      return { ...state, profiles: Array.isArray(d.profiles) ? (d.profiles as VoiceProfile[]) : [] }
     case 'entity_described': {
       const entry = d.entry as unknown as EntityEntry | undefined
       if (!entry || !entry.canonical) return state

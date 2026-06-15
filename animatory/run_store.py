@@ -106,6 +106,23 @@ def _deserialize(row: tuple) -> RunRecord:
     return RunRecord(**d)
 
 
+async def _apply_migrations(db: aiosqlite.Connection) -> None:
+    """Add columns introduced after the original schema to an existing DB.
+
+    Idempotent without swallowing errors: it inspects ``PRAGMA table_info`` and
+    only ALTERs columns that are genuinely missing, so a real DDL failure surfaces
+    instead of being hidden by a blanket ``except``. ``col``/``coltype`` come from
+    the hardcoded ``_MIGRATIONS`` constant — never from user input.
+    """
+    cur = await db.execute("PRAGMA table_info(runs)")
+    existing = {row[1] for row in await cur.fetchall()}
+    for col, coltype in _MIGRATIONS:
+        if col in existing:
+            continue
+        # SQLite DDL identifiers cannot be parameterized; values are trusted constants.
+        await db.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query
+
+
 class RunStore:
     def __init__(self, db_path: str = "animatory.db") -> None:
         self._db_path = db_path
@@ -113,11 +130,7 @@ class RunStore:
     async def init(self) -> None:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE_SQL)
-            for col, coltype in _MIGRATIONS:
-                try:
-                    await db.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")
-                except Exception:
-                    pass  # column already exists
+            await _apply_migrations(db)
             await db.commit()
 
     async def create(self, record: RunRecord) -> RunRecord:
@@ -223,11 +236,7 @@ class InMemoryRunStore(RunStore):
     async def init(self) -> None:
         self._conn = await aiosqlite.connect(":memory:")
         await self._conn.execute(_CREATE_TABLE_SQL)
-        for col, coltype in _MIGRATIONS:
-            try:
-                await self._conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")
-            except Exception:
-                pass  # column already exists
+        await _apply_migrations(self._conn)
         await self._conn.commit()
 
     async def _exec(self, sql: str, params=()) -> aiosqlite.Cursor:
