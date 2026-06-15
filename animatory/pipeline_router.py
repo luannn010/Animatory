@@ -464,13 +464,18 @@ async def save_entities(episode_id: str, body: EntityRegistryRequest):
         for entry in incoming:
             d = entry.model_dump()
             old = prev.get(entity_registry._key(d["canonical"]))
-            blocks_changed = (
-                d.get("description") != (old or {}).get("description")
-                or d.get("voice") != (old or {}).get("voice")
-            )
-            has_content = bool(d.get("description")) or bool(d.get("voice"))
-            if blocks_changed and has_content:
-                d["generated"] = False
+            # Only an entry that EXISTS on disk and whose blocks changed counts as a
+            # human edit. With no prior baseline (e.g. the first save) we can't call
+            # it an edit, so honor the incoming `generated` flag as-is — otherwise the
+            # registry's own first write would be mis-flagged as human-edited.
+            if old is not None:
+                blocks_changed = (
+                    d.get("description") != old.get("description")
+                    or d.get("voice") != old.get("voice")
+                )
+                has_content = bool(d.get("description")) or bool(d.get("voice"))
+                if blocks_changed and has_content:
+                    d["generated"] = False
             out.append(d)
         return out
 

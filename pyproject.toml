@@ -23,6 +23,8 @@ dependencies = [
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "pytest-timeout>=2.3.0",
     "anyio[trio]>=4.4.0",
 ]
 
@@ -35,3 +37,18 @@ packages = ["animatory"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Per-test guard so a genuinely hung test fails fast instead of stalling CI.
+# (The interpreter-shutdown hang is fixed at the source in tests/conftest.py.)
+timeout = 120
+# Coverage is configured here (single source of truth); CI just runs `pytest`.
+# `--cov` with no arg uses [tool.coverage.run].source below.
+addopts = "--cov --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+source = ["animatory"]
+branch = true
+omit = ["animatory/cli.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

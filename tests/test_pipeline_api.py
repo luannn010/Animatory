@@ -682,8 +682,13 @@ async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
         {"scene_id": sid, "location": "L", "characters": ["A"], "shot_type": "wide",
          "action": "old", "dialogue": [], "narration": [], "mood": "m"}]}), encoding="utf-8")
 
+    # Reparse uses the beats-locator contract: the model returns anchors (not prose)
+    # and code lifts the action verbatim from the chunk source. Anchor into TINY_TXT
+    # ("Sentence one. Sentence two. " repeated); meta fields come from the model.
     returned = {"scene_id": sid, "location": "L2", "characters": ["A"], "shot_type": "medium",
-                "action": "new action", "dialogue": [], "narration": [], "mood": "calm"}
+                "mood": "calm",
+                "beats": [{"type": "action", "start_anchor": "Sentence one.",
+                           "end_anchor": "Sentence two."}]}
     with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
@@ -695,7 +700,9 @@ async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["scene"]["scene_id"] == sid
-    assert body["scene"]["action"] == "new action"
+    assert body["scene"]["location"] == "L2"           # meta carried from the model
+    assert body["scene"]["mood"] == "calm"
+    assert "Sentence one." in body["scene"]["action"]  # action lifted from source
 
 
 @pytest.mark.asyncio
