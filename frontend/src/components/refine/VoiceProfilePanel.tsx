@@ -2,14 +2,22 @@
 import { useEffect, useState } from 'react'
 import { getVoiceProfiles, type VoiceProfile } from '../../api/pipeline'
 
-interface Props { episodeId: string; refreshKey?: number }
+interface Props {
+  episodeId: string
+  refreshKey?: number
+  // When non-null, the panel renders streamed profiles (live parse) instead of
+  // fetching; an empty array means "streaming, none yet" → skeleton.
+  liveProfiles?: VoiceProfile[] | null
+}
 
-export function VoiceProfilePanel({ episodeId, refreshKey = 0 }: Props) {
+export function VoiceProfilePanel({ episodeId, refreshKey = 0, liveProfiles = null }: Props) {
+  const streaming = liveProfiles !== null
   const [profiles, setProfiles] = useState<VoiceProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (streaming) return  // streamed data drives the panel
     let alive = true
     setLoading(true); setError('')
     getVoiceProfiles(episodeId)
@@ -17,24 +25,27 @@ export function VoiceProfilePanel({ episodeId, refreshKey = 0 }: Props) {
       .catch(e => { if (alive) setError(String(e)) })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
-  }, [episodeId, refreshKey])
+  }, [episodeId, refreshKey, streaming])
+
+  const shown = streaming ? (liveProfiles as VoiceProfile[]) : profiles
+  const isLoading = streaming ? shown.length === 0 : loading
 
   return (
     <div className="rounded-lg border border-hairline bg-canvas p-4">
       <h3 className="text-sm font-semibold text-ink mb-3">Character voices</h3>
-      {loading ? (
+      {isLoading ? (
         <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-10 rounded-md bg-surface animate-pulse" />
           ))}
         </div>
-      ) : error ? (
+      ) : !streaming && error ? (
         <p className="text-xs text-brand-error">{error}</p>
-      ) : profiles.length === 0 ? (
+      ) : shown.length === 0 ? (
         <p className="text-xs text-stone">No dialogue parsed yet — voice profiles appear once chapters are parsed.</p>
       ) : (
         <ul className="space-y-3">
-          {profiles.map(p => (
+          {shown.map(p => (
             <li key={p.character} className="border-t border-hairline pt-2.5 first:border-t-0 first:pt-0">
               <div className="flex items-baseline justify-between gap-2 mb-1">
                 <span className="text-xs font-medium text-ink">{p.character}</span>
