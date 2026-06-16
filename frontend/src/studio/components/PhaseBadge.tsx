@@ -10,11 +10,17 @@ const STYLES: Record<Phase, string> = {
 
 interface Props { phase: Phase; label?: string }
 
+const FALLBACK = 'bg-surface text-stone border-hairline'
+
 export function PhaseBadge({ phase, label }: Props) {
+  // Defensive: an unknown/missing phase (e.g. a backend returning a legacy phase
+  // vocabulary) must never crash the whole app — fall back to a neutral badge.
+  const style = STYLES[phase] ?? FALLBACK
+  const text = label ?? PHASE_META[phase]?.short ?? (phase ? String(phase) : '—')
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${STYLES[phase]}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${style}`}>
       <span className="w-1.5 h-1.5 rounded-full bg-current" />
-      {label ?? PHASE_META[phase].short}
+      {text}
     </span>
   )
 }

@@ -1,6 +1,6 @@
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase, GateStatus,
-  TrackId, TrackProgress, DesignAsset, StoryboardPanel, VoiceCast, VoiceOption,
+  TrackId, TrackProgress, DesignAsset, GenCandidate, StoryboardPanel, VoiceCast, VoiceOption,
   DialogueClip, Animatic,
 } from './types'
 import { PHASE_ORDER, PRE_TRACKS } from './phases'
@@ -124,7 +124,16 @@ function seedDesignAssets(projectId: string): DesignAsset[] {
     { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
     { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
   ]
-  return base.map((a, i) => ({ ...a, id: `${projectId}-da${i + 1}`, projectId, candidates: [] }))
+  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, bw_final: 3, color: 4, locked: 3 }
+  return base.map((a, i) => {
+    const id = `${projectId}-da${i + 1}`
+    const n = COUNT[a.stage]
+    const candidates: GenCandidate[] = Array.from({ length: n }, (_, j) => ({
+      id: `${id}-c${j + 1}`, url: '', runId: null, prompt: a.promptText, createdAt: '2026-06-02T00:00:00Z',
+      selected: j === 0 && a.stage !== 'rough',
+    }))
+    return { ...a, id, projectId, candidates }
+  })
 }
 
 function seedStoryboardPanels(projectId: string, sceneId?: string): StoryboardPanel[] {

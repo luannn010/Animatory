@@ -93,6 +93,7 @@ export interface DesignAsset {
   stage: DesignStage
   candidates: GenCandidate[]
   lockedRef: string | null
+  summary?: string           // one-line enrichment summary (real entities only)
 }
 
 export interface StoryboardPanel {

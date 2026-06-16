@@ -30,6 +30,14 @@ export default {
         muted:              '#a8a8aa',
         'on-dark':          '#ffffff',
         'on-dark-muted':    '#b3b3b3',
+        // DesignStage ramp (semantic): rough→grey, bw_final→slate, color→accent, locked→green
+        'stage-rough':      '#a8a8aa',
+        'stage-bw':         '#5a5a5c',
+        'stage-color':      '#3772cf',
+        'stage-locked':     '#00b48a',
+        // Pre-production surfaces
+        'stage-dark':       '#14181d',   // animatic cinematic stage
+        paper:              '#faf8f3',   // panel-board warm canvas
       },
       fontFamily: {
         sans: ['InterVariable', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
