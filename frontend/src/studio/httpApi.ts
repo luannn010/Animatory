@@ -1,7 +1,12 @@
 import { API_BASE_URL } from '../config'
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase,
+  DesignAsset, StoryboardPanel, VoiceCast, VoiceOption, DialogueClip, Animatic,
 } from './types'
+
+const notImpl = (name: string): never => {
+  throw new Error(`studioHttpApi.${name} not implemented — wire the real /studio route`)
+}
 
 const BASE = `${API_BASE_URL}/studio`
 
@@ -38,6 +43,15 @@ export const studioHttpApi = {
   getAssets: (projectId: string) => http<Asset[]>(`/projects/${projectId}/assets`),
   getVendorScenes: (projectId: string) => http<VendorScene[]>(`/projects/${projectId}/vendor-scenes`),
   getPostStages: (projectId: string) => http<PostStage[]>(`/projects/${projectId}/post-stages`),
+
+  // Phase-1 reads — not yet backed by a real route. Stubbed so the facade union
+  // stays type-compatible with the mock; mock mode is the source of truth for now.
+  getDesignAssets: (_projectId: string): Promise<DesignAsset[]> => notImpl('getDesignAssets'),
+  getStoryboardPanels: (_projectId: string, _sceneId?: string): Promise<StoryboardPanel[]> => notImpl('getStoryboardPanels'),
+  getVoiceCast: (_projectId: string): Promise<VoiceCast[]> => notImpl('getVoiceCast'),
+  getVoiceOptions: (): Promise<VoiceOption[]> => notImpl('getVoiceOptions'),
+  getDialogueClips: (_projectId: string, _sceneId?: string): Promise<DialogueClip[]> => notImpl('getDialogueClips'),
+  getAnimatic: (_projectId: string): Promise<Animatic> => notImpl('getAnimatic'),
 }
 
 // ── Live-only extras (model seams) ────────────────────────────────────────────

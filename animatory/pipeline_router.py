@@ -167,6 +167,7 @@ class SceneModel(BaseModel):
     dialogue: list[SceneDialogueModel]
     mood: str
     narration: list[str] = []
+    summary: str | None = None  # synthesized storyboard caption (enrichment phase)
 
 
 class SaveScenesRequest(BaseModel):
@@ -176,6 +177,12 @@ class SaveScenesRequest(BaseModel):
 class AliasEntry(BaseModel):
     canonical: str
     aliases: list[str] = []
+    # Optional structured enrichment blocks (see entity_enrichment.py). Loosely
+    # typed so character vs. location description shapes both round-trip exactly.
+    description: dict | None = None
+    voice: dict | None = None
+    appears_in: list[str] = []
+    generated: bool = True
 
 
 class EntityRegistryRequest(BaseModel):
@@ -238,6 +245,12 @@ async def parse_transcript(
         rec = await store.get(run_id)
         await store.update(run_id, logs=(rec.logs or []) + [line])
 
+    async def _emit_event(ev_type: str, payload: dict):
+        # Append a structured event; the SSE stream relays each as its own named
+        # event so the UI can reveal scenes/entities progressively.
+        rec = await store.get(run_id)
+        await store.update(run_id, events=(rec.events or []) + [{"type": ev_type, "payload": payload}])
+
     async def _run():
         logger.info("[parse] run=%s episode=%s started", run_id, episode_id)
         await store.update(run_id, status=RunStatusEnum.running)
@@ -247,6 +260,7 @@ async def parse_transcript(
                 ep_dir,
                 chunk_ids=body.chunk_ids,
                 on_progress=_on_progress,
+                on_event=_emit_event,
             )
             logs = [f"Parsed {p.name}" for p in paths]
             logger.info("[parse] run=%s episode=%s done: %d file(s)", run_id, episode_id, len(paths))
@@ -441,10 +455,37 @@ async def save_entities(episode_id: str, body: EntityRegistryRequest):
     ep_dir = _processed_dir() / episode_id
     if not (ep_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+
+    # A human edit to a description/voice flips ``generated`` to False so the
+    # auto-enrichment pass won't overwrite it on the next parse. We detect edits by
+    # diffing the incoming blocks against what is currently on disk.
+    existing = entity_registry.load(episode_id, ep_dir)
+
+    def _finalize(incoming: list, prev_entries: list) -> list[dict]:
+        prev = {entity_registry._key(e["canonical"]): e for e in prev_entries}
+        out = []
+        for entry in incoming:
+            d = entry.model_dump()
+            old = prev.get(entity_registry._key(d["canonical"]))
+            # Only an entry that EXISTS on disk and whose blocks changed counts as a
+            # human edit. With no prior baseline (e.g. the first save) we can't call
+            # it an edit, so honor the incoming `generated` flag as-is — otherwise the
+            # registry's own first write would be mis-flagged as human-edited.
+            if old is not None:
+                blocks_changed = (
+                    d.get("description") != old.get("description")
+                    or d.get("voice") != old.get("voice")
+                )
+                has_content = bool(d.get("description")) or bool(d.get("voice"))
+                if blocks_changed and has_content:
+                    d["generated"] = False
+            out.append(d)
+        return out
+
     reg = entity_registry.EntityRegistry(
         episode_id=episode_id,
-        characters=[e.model_dump() for e in body.characters],
-        locations=[e.model_dump() for e in body.locations],
+        characters=_finalize(body.characters, existing.characters),
+        locations=_finalize(body.locations, existing.locations),
     )
     entity_registry.save(reg, ep_dir, now=_now())
     logger.info("[entities] episode=%s saved %d character(s), %d location(s)",

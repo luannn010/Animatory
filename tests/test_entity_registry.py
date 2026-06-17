@@ -116,3 +116,106 @@ def test_learn_ignores_blank_names():
     reg.learn([{"location": "", "characters": ["", "  "], "dialogue": []}])
     assert reg.characters == []
     assert reg.locations == []
+
+
+# ── descriptive enrichment ───────────────────────────────────────────────────
+
+
+def test_old_names_only_registry_round_trips(tmp_path):
+    # A registry written before descriptions existed must load unchanged.
+    legacy = {
+        "episode_id": "ep1",
+        "updated_at": "2026-06-01T00:00:00Z",
+        "characters": [{"canonical": "Từ An", "aliases": ["tu an"]}],
+        "locations": [{"canonical": "Phòng công chúa", "aliases": []}],
+    }
+    (tmp_path / "entities.json").write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    reg = er.load("ep1", tmp_path)
+    assert reg.characters[0]["canonical"] == "Từ An"
+    assert "description" not in reg.characters[0]  # not forced on load
+
+
+def test_description_blocks_round_trip(tmp_path):
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{
+            "canonical": "Từ An", "aliases": [],
+            "appears_in": ["C001_S01"],
+            "description": {"summary": "a censor", "appearance": "lean",
+                            "attire": "ink robes", "age_build": "young", "palette": "black"},
+            "voice": {"register": "low", "tone": "dry", "pace": "measured",
+                      "dominant_emotion": "mocking", "dominant_intensity": "medium", "line_count": 3},
+            "generated": True,
+        }],
+    )
+    er.save(reg, tmp_path, now="2026-06-04T00:00:00Z")
+    reloaded = er.load("ep1", tmp_path)
+    c = reloaded.characters[0]
+    assert c["description"]["summary"] == "a censor"
+    assert c["voice"]["register"] == "low"
+    assert c["appears_in"] == ["C001_S01"]
+
+
+def test_learn_keeps_existing_description():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "description": {"summary": "a censor"}, "generated": True}],
+    )
+    reg.learn([{"location": "Garden", "characters": ["Từ An", "Lan Nhi"], "dialogue": []}])
+    tu_an = next(e for e in reg.characters if e["canonical"] == "Từ An")
+    assert tu_an["description"]["summary"] == "a censor"  # untouched by learn
+
+
+def test_merge_descriptions_fills_empty_only():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "description": {"summary": "a censor", "appearance": ""},
+                     "generated": True}],
+    )
+    ok = reg.merge_descriptions(
+        "characters", "từ an",
+        description={"summary": "WRONG", "appearance": "lean and tall"},
+        appears_in=["C001_S01"],
+    )
+    assert ok is True
+    d = reg.characters[0]["description"]
+    assert d["summary"] == "a censor"        # already set → preserved
+    assert d["appearance"] == "lean and tall"  # was empty → filled
+    assert reg.characters[0]["appears_in"] == ["C001_S01"]
+
+
+def test_merge_descriptions_respects_user_edit():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "description": {"summary": "", "appearance": ""},
+                     "voice": er.empty_voice(),
+                     "generated": False}],  # human edited this entry
+    )
+    reg.merge_descriptions(
+        "characters", "Từ An",
+        description={"summary": "machine guess"},
+        voice={"register": "machine", "dominant_emotion": "angry", "line_count": 5},
+    )
+    c = reg.characters[0]
+    assert c["description"]["summary"] == ""          # authored field skipped
+    assert c["voice"]["register"] == ""               # authored field skipped
+    assert c["voice"]["dominant_emotion"] == "angry"  # objective stat still refreshes
+    assert c["voice"]["line_count"] == 5
+
+
+def test_merge_descriptions_force_overwrites():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "description": {"summary": "old"}, "generated": False}],
+    )
+    reg.merge_descriptions("characters", "Từ An", description={"summary": "new"}, force=True)
+    assert reg.characters[0]["description"]["summary"] == "new"
+
+
+def test_merge_descriptions_unknown_name_is_noop():
+    reg = er.EntityRegistry(episode_id="ep1")
+    assert reg.merge_descriptions("characters", "Nobody", description={"summary": "x"}) is False

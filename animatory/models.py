@@ -133,6 +133,7 @@ class RunRecord(BaseModel):
     outputs: list[OutputArtifact] = []
     error: str | None = None
     logs: list[str] = []
+    events: list[dict] = []  # structured streamed events (parse: chunk_parsed, entity_described, …)
     episode_id: str | None = None
     phase: str | None = None
     track: str | None = None

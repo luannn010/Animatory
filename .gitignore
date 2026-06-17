@@ -31,3 +31,7 @@ animatory.db
 
 # Internal planning docs (specs stay tracked, plans do not)
 /docs/superpowers/plans/
+# Coverage artifacts (CI uploads them; not source)
+.coverage
+coverage.xml
+htmlcov/

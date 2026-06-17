@@ -109,6 +109,17 @@ export function streamRun(runId: string): MockEventSource {
     emit({ type: 'log', run_id: runId, timestamp: now(), data: { message: raw.message } })
   })
 
+  // Structured parse-stream events: relay the payload verbatim under the event's
+  // own type so ChapterView can reveal scenes/entities progressively.
+  for (const t of ['phase', 'chunk_parsed', 'voice_profiles', 'entity_described', 'scene_summary'] as const) {
+    es.addEventListener(t, (e: Event) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as RunEvent['data']
+        emit({ type: t, run_id: runId, timestamp: now(), data })
+      } catch { /* ignore malformed event */ }
+    })
+  }
+
   es.addEventListener('done', (e: Event) => {
     // Backend sends full RunRecord on the `done` event
     const rec = JSON.parse((e as MessageEvent).data) as {

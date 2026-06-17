@@ -25,15 +25,19 @@ CREATE TABLE IF NOT EXISTS runs (
     logs            TEXT,
     episode_id      TEXT,
     phase           TEXT,
-    track           TEXT
+    track           TEXT,
+    events          TEXT
 )
 """
 
 _COLUMNS = [
     "run_id", "agent_id", "status", "attempts", "started_at", "finished_at",
     "duration_s", "cost", "gpu_seconds", "tokens", "acceptance_passed",
-    "outputs", "error", "logs", "episode_id", "phase", "track",
+    "outputs", "error", "logs", "episode_id", "phase", "track", "events",
 ]
+
+# Columns added after the original schema — migrated in on init() for old DBs.
+_MIGRATIONS = [("events", "TEXT")]
 
 
 def _serialize(record: RunRecord) -> dict[str, Any]:
@@ -55,6 +59,7 @@ def _serialize(record: RunRecord) -> dict[str, Any]:
     d["episode_id"] = record.episode_id
     d["phase"] = record.phase
     d["track"] = record.track
+    d["events"] = json.dumps(record.events)
     return d
 
 
@@ -89,9 +94,33 @@ def _deserialize(row: tuple) -> RunRecord:
             d["logs"] = []
     else:
         d["logs"] = []
+    if d.get("events"):
+        try:
+            d["events"] = json.loads(d["events"])
+        except Exception:
+            d["events"] = []
+    else:
+        d["events"] = []
     if d.get("acceptance_passed") is not None:
         d["acceptance_passed"] = bool(d["acceptance_passed"])
     return RunRecord(**d)
+
+
+async def _apply_migrations(db: aiosqlite.Connection) -> None:
+    """Add columns introduced after the original schema to an existing DB.
+
+    Idempotent without swallowing errors: it inspects ``PRAGMA table_info`` and
+    only ALTERs columns that are genuinely missing, so a real DDL failure surfaces
+    instead of being hidden by a blanket ``except``. ``col``/``coltype`` come from
+    the hardcoded ``_MIGRATIONS`` constant — never from user input.
+    """
+    cur = await db.execute("PRAGMA table_info(runs)")
+    existing = {row[1] for row in await cur.fetchall()}
+    for col, coltype in _MIGRATIONS:
+        if col in existing:
+            continue
+        # SQLite DDL identifiers cannot be parameterized; values are trusted constants.
+        await db.execute(f"ALTER TABLE runs ADD COLUMN {col} {coltype}")  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query
 
 
 class RunStore:
@@ -101,6 +130,7 @@ class RunStore:
     async def init(self) -> None:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE_SQL)
+            await _apply_migrations(db)
             await db.commit()
 
     async def create(self, record: RunRecord) -> RunRecord:
@@ -142,6 +172,8 @@ class RunStore:
             if key == "outputs" and value is not None and not isinstance(value, str):
                 value = json.dumps([o.model_dump() if hasattr(o, "model_dump") else o for o in value])
             if key == "logs" and value is not None and not isinstance(value, str):
+                value = json.dumps(value)
+            if key == "events" and value is not None and not isinstance(value, str):
                 value = json.dumps(value)
             if key == "acceptance_passed" and value is not None:
                 value = int(value)
@@ -204,6 +236,7 @@ class InMemoryRunStore(RunStore):
     async def init(self) -> None:
         self._conn = await aiosqlite.connect(":memory:")
         await self._conn.execute(_CREATE_TABLE_SQL)
+        await _apply_migrations(self._conn)
         await self._conn.commit()
 
     async def _exec(self, sql: str, params=()) -> aiosqlite.Cursor:
@@ -249,6 +282,8 @@ class InMemoryRunStore(RunStore):
             if key == "outputs" and value is not None and not isinstance(value, str):
                 value = json.dumps([o.model_dump() if hasattr(o, "model_dump") else o for o in value])
             if key == "logs" and value is not None and not isinstance(value, str):
+                value = json.dumps(value)
+            if key == "events" and value is not None and not isinstance(value, str):
                 value = json.dumps(value)
             if key == "acceptance_passed" and value is not None:
                 value = int(value)

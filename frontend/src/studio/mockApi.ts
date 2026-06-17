@@ -1,19 +1,33 @@
 import type {
-  Project, Scene, Asset, VendorScene, PostStage, Phase, PhaseStatus,
+  Project, Scene, Asset, VendorScene, PostStage, Phase, GateStatus,
+  TrackId, TrackProgress, DesignAsset, StoryboardPanel, VoiceCast, VoiceOption,
+  DialogueClip, Animatic,
 } from './types'
-import { PHASE_ORDER } from './phases'
+import { PHASE_ORDER, PRE_TRACKS } from './phases'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const delay = (ms = 110) => new Promise<void>(r => setTimeout(r, ms))
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
-function phasesUpTo(current: Phase): Record<Phase, PhaseStatus> {
+function gatesUpTo(current: Phase): Record<Phase, GateStatus> {
   const idx = PHASE_ORDER.indexOf(current)
-  const out = {} as Record<Phase, PhaseStatus>
+  const out = {} as Record<Phase, GateStatus>
   PHASE_ORDER.forEach((p, i) => {
-    out[p] = i < idx ? 'complete' : i === idx ? 'active' : 'locked'
+    out[p] = i < idx ? 'passed' : i === idx ? 'open' : 'locked'
   })
+  return out
+}
+
+// Pre-production tracks: ready once the phase is reached or passed, active when
+// the project sits at `pre`, idle when pre hasn't started.
+function seedPreTracks(current: Phase): Record<TrackId, TrackProgress> {
+  const idx = PHASE_ORDER.indexOf(current)
+  const preIdx = PHASE_ORDER.indexOf('pre')
+  const status: TrackProgress['status'] = idx > preIdx ? 'ready' : idx === preIdx ? 'active' : 'idle'
+  const done = status === 'ready' ? 6 : status === 'active' ? 3 : 0
+  const out = {} as Record<TrackId, TrackProgress>
+  PRE_TRACKS.forEach(t => { out[t] = { total: 6, done, status } })
   return out
 }
 
@@ -24,25 +38,25 @@ function seedProjects(): Project[] {
     {
       id: 'ep01', title: 'Ep. 01 — The Awakening',
       thumbnail: 'linear-gradient(135deg,#1e3a5f,#2d5a9e)',
-      currentPhase: 'vendor', phases: phasesUpTo('vendor'),
+      phase: 'production', gates: gatesUpTo('production'), preTracks: seedPreTracks('production'),
       sceneCount: 24, createdAt: '2026-05-20T00:00:00Z',
     },
     {
       id: 'ep02', title: 'Ep. 02 — Shadows Fall',
       thumbnail: 'linear-gradient(135deg,#2d1b4e,#5b3480)',
-      currentPhase: 'pre', phases: phasesUpTo('pre'),
+      phase: 'pre', gates: gatesUpTo('pre'), preTracks: seedPreTracks('pre'),
       sceneCount: 18, createdAt: '2026-05-24T00:00:00Z',
     },
     {
       id: 'ep00', title: 'Ep. 00 — Pilot',
       thumbnail: 'linear-gradient(135deg,#0f3d2e,#1a5c40)',
-      currentPhase: 'post', phases: phasesUpTo('post'),
+      phase: 'post', gates: gatesUpTo('post'), preTracks: seedPreTracks('post'),
       sceneCount: 12, createdAt: '2026-05-10T00:00:00Z',
     },
     {
       id: 'ep03', title: 'Ep. 03 — The Storm',
       thumbnail: 'linear-gradient(135deg,#3b2000,#6b3d00)',
-      currentPhase: 'parse', phases: phasesUpTo('parse'),
+      phase: 'script', gates: gatesUpTo('script'), preTracks: seedPreTracks('script'),
       sceneCount: 22, createdAt: '2026-06-01T00:00:00Z',
     },
   ]
@@ -97,6 +111,69 @@ function seedPostStages(projectId: string): PostStage[] {
   ]
 }
 
+// ── Phase-1 (Pre-Production) seed data ───────────────────────────────────────
+// Hardcoded here; the real impl seeds from EntityRegistry (design assets, voice
+// cast) + PipelineScene (storyboard panels, dialogue clips).
+
+function seedDesignAssets(projectId: string): DesignAsset[] {
+  const base: Omit<DesignAsset, 'id' | 'projectId' | 'candidates'>[] = [
+    { kind: 'character', sourceEntity: 'Hana', displayName: 'Hana', promptText: 'young woman, red hair, determined', refImageUrl: null, stage: 'color', lockedRef: null },
+    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'bw_final', lockedRef: null },
+    { kind: 'location', sourceEntity: 'Apartment', displayName: 'Hana\'s Apartment', promptText: 'cramped city apartment, night, rain', refImageUrl: null, stage: 'rough', lockedRef: null },
+    { kind: 'location', sourceEntity: 'Office', displayName: 'Riku\'s Office', promptText: 'cluttered office, monitors glowing', refImageUrl: null, stage: 'rough', lockedRef: null },
+    { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
+    { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
+  ]
+  return base.map((a, i) => ({ ...a, id: `${projectId}-da${i + 1}`, projectId, candidates: [] }))
+}
+
+function seedStoryboardPanels(projectId: string, sceneId?: string): StoryboardPanel[] {
+  const all: StoryboardPanel[] = [
+    { id: `${projectId}-pb1`, sceneId: `${projectId}-sc1`, order: 1, image: null, source: 'empty', shotType: 'wide', action: 'Hana wakes to a crash', dialogueRef: null, durationS: 3, camera: 'static', sfx: 'thunder' },
+    { id: `${projectId}-pb2`, sceneId: `${projectId}-sc1`, order: 2, image: null, source: 'generated', shotType: 'close', action: 'Eyes snap open', dialogueRef: null, durationS: 1.5, camera: 'push_in', sfx: '' },
+    { id: `${projectId}-pb3`, sceneId: `${projectId}-sc2`, order: 1, image: null, source: 'empty', shotType: 'medium', action: 'She runs to the window', dialogueRef: null, durationS: 2, camera: 'pan', sfx: 'footsteps' },
+    { id: `${projectId}-pb4`, sceneId: `${projectId}-sc3`, order: 1, image: null, source: 'drawn', shotType: 'wide', action: 'Riku slams his phone', dialogueRef: null, durationS: 2.5, camera: 'static', sfx: 'slam' },
+  ]
+  return sceneId ? all.filter(p => p.sceneId === sceneId) : all
+}
+
+const VOICE_OPTIONS: VoiceOption[] = [
+  { voiceId: 'vo-aria', label: 'Aria — warm alto', gender: 'female', sampleUrl: '' },
+  { voiceId: 'vo-kane', label: 'Kane — gravel baritone', gender: 'male', sampleUrl: '' },
+  { voiceId: 'vo-mio', label: 'Mio — bright soprano', gender: 'female', sampleUrl: '' },
+  { voiceId: 'vo-ren', label: 'Ren — measured tenor', gender: 'male', sampleUrl: '' },
+]
+
+function seedVoiceCast(projectId: string): VoiceCast[] {
+  void projectId
+  return [
+    { character: 'Hana', voiceId: 'vo-aria', previewUrl: null, dominantEmotion: 'determined', lineCount: 14 },
+    { character: 'Riku', voiceId: null, previewUrl: null, dominantEmotion: 'angry', lineCount: 9 },
+    { character: 'Extras', voiceId: null, previewUrl: null, dominantEmotion: null, lineCount: 3 },
+  ]
+}
+
+function seedDialogueClips(projectId: string, sceneId?: string): DialogueClip[] {
+  const all: DialogueClip[] = [
+    { id: `${projectId}-dc1`, sceneId: `${projectId}-sc6`, character: 'Hana', line: 'You felt it too.', emotion: 'tender', intensity: 'medium', audioUrl: null, durationS: 1.4, status: 'generated' },
+    { id: `${projectId}-dc2`, sceneId: `${projectId}-sc6`, character: 'Riku', line: 'Everyone did.', emotion: 'anxious', intensity: 'high', audioUrl: null, durationS: 1.1, status: 'pending' },
+    { id: `${projectId}-dc3`, sceneId: `${projectId}-sc6`, character: 'Hana', line: 'Then we don\'t have much time.', emotion: 'determined', intensity: 'high', audioUrl: null, durationS: 1.8, status: 'approved' },
+  ]
+  return sceneId ? all.filter(c => c.sceneId === sceneId) : all
+}
+
+function seedAnimatic(projectId: string): Animatic {
+  return {
+    projectId, status: 'draft', totalDurationS: 7.5,
+    entries: [
+      { panelId: `${projectId}-pb1`, sceneId: `${projectId}-sc1`, startS: 0, durationS: 3, audioClipId: null },
+      { panelId: `${projectId}-pb2`, sceneId: `${projectId}-sc1`, startS: 3, durationS: 1.5, audioClipId: null },
+      { panelId: `${projectId}-pb3`, sceneId: `${projectId}-sc2`, startS: 4.5, durationS: 2, audioClipId: null },
+      { panelId: `${projectId}-pb4`, sceneId: `${projectId}-sc3`, startS: 6.5, durationS: 1, audioClipId: `${projectId}-dc1` },
+    ],
+  }
+}
+
 // ── in-memory state ──────────────────────────────────────────────────────────
 
 let projects: Project[] = seedProjects()
@@ -131,7 +208,7 @@ export const studioApi = {
     const project: Project = {
       id, title: `Untitled Episode ${newProjectCounter}`,
       thumbnail: 'linear-gradient(135deg,#334155,#1e293b)',
-      currentPhase: 'parse', phases: phasesUpTo('parse'),
+      phase: 'script', gates: gatesUpTo('script'), preTracks: seedPreTracks('script'),
       sceneCount: 0, createdAt: '2026-06-02T00:00:00Z',
     }
     projects = [project, ...projects]
@@ -149,9 +226,9 @@ export const studioApi = {
     const p = find(id)
     const target = PHASE_ORDER.indexOf(to)
     PHASE_ORDER.forEach((ph, i) => {
-      p.phases[ph] = i < target ? 'complete' : i === target ? 'active' : 'locked'
+      p.gates[ph] = i < target ? 'passed' : i === target ? 'open' : 'locked'
     })
-    p.currentPhase = to
+    p.phase = to
     return clone(p)
   },
 
@@ -166,5 +243,25 @@ export const studioApi = {
   },
   async getPostStages(projectId: string): Promise<PostStage[]> {
     await delay(); find(projectId); return seedPostStages(projectId)
+  },
+
+  // ── Phase-1 (Pre-Production) reads ─────────────────────────────────────────
+  async getDesignAssets(projectId: string): Promise<DesignAsset[]> {
+    await delay(); find(projectId); return seedDesignAssets(projectId)
+  },
+  async getStoryboardPanels(projectId: string, sceneId?: string): Promise<StoryboardPanel[]> {
+    await delay(); find(projectId); return seedStoryboardPanels(projectId, sceneId)
+  },
+  async getVoiceCast(projectId: string): Promise<VoiceCast[]> {
+    await delay(); find(projectId); return seedVoiceCast(projectId)
+  },
+  async getVoiceOptions(): Promise<VoiceOption[]> {
+    await delay(); return clone(VOICE_OPTIONS)
+  },
+  async getDialogueClips(projectId: string, sceneId?: string): Promise<DialogueClip[]> {
+    await delay(); find(projectId); return seedDialogueClips(projectId, sceneId)
+  },
+  async getAnimatic(projectId: string): Promise<Animatic> {
+    await delay(); find(projectId); return seedAnimatic(projectId)
   },
 }

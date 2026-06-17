@@ -16,6 +16,40 @@ def _key(name: str) -> str:
     return " ".join(nfc.split()).casefold()
 
 
+# ── descriptive enrichment shapes ────────────────────────────────────────────
+# Entries carry, on top of {canonical, aliases}, optional structured blocks
+# filled by the enrichment phases (see animatory/entity_enrichment.py). Old
+# name-only registries load unchanged; these blocks are added lazily.
+
+CHAR_DESC_FIELDS = ("summary", "appearance", "attire", "age_build", "palette")
+LOC_DESC_FIELDS = ("summary", "setting", "lighting")
+VOICE_AUTHORED_FIELDS = ("register", "tone", "pace")
+VOICE_STAT_FIELDS = ("dominant_emotion", "dominant_intensity", "line_count")
+
+
+def empty_description(kind: str) -> dict:
+    """A blank structured description for a character or location."""
+    fields = CHAR_DESC_FIELDS if kind == "characters" else LOC_DESC_FIELDS
+    d: dict = {f: "" for f in fields}
+    if kind == "locations":
+        d["time_variants"] = []
+    return d
+
+
+def empty_voice() -> dict:
+    """A blank voice profile (authored fields + objective stats)."""
+    return {
+        **{f: "" for f in VOICE_AUTHORED_FIELDS},
+        "dominant_emotion": "",
+        "dominant_intensity": "",
+        "line_count": 0,
+    }
+
+
+def _is_empty(v: object) -> bool:
+    return v is None or v == "" or v == []
+
+
 class EntityRegistry:
     def __init__(
         self,
@@ -147,6 +181,62 @@ class EntityRegistry:
             self.items.append(entry)
             item_keys.add(k)
         return self
+
+    def _find(self, kind: str, name: str) -> dict | None:
+        """Resolve *name* (canonical or alias, case-insensitively) to its entry."""
+        entries = self.characters if kind == "characters" else self.locations
+        k = _key(name)
+        for e in entries:
+            if _key(e["canonical"]) == k:
+                return e
+            if any(_key(a) == k for a in e.get("aliases", [])):
+                return e
+        return None
+
+    def merge_descriptions(
+        self,
+        kind: str,
+        name: str,
+        *,
+        description: dict | None = None,
+        voice: dict | None = None,
+        appears_in: list | None = None,
+        force: bool = False,
+    ) -> bool:
+        """Merge synthesized blocks onto a known entry. Returns True if matched.
+
+        Fill-empty by default: a description/authored-voice field is written only
+        when it is currently empty, so re-running enrichment never clobbers prior
+        work. A human edit flips ``generated`` to ``False`` (done at the API
+        layer), which skips all authored fields here unless ``force=True``.
+        Objective voice stats (``dominant_*``, ``line_count``) and ``appears_in``
+        always refresh — they are computed, not authored.
+        """
+        entry = self._find(kind, name)
+        if entry is None:
+            return False
+        machine = bool(entry.get("generated", True)) or force
+
+        if appears_in is not None:
+            entry["appears_in"] = list(appears_in)
+
+        if description:
+            db = entry.setdefault("description", empty_description(kind))
+            if machine:
+                for fld, val in description.items():
+                    if force or _is_empty(db.get(fld)):
+                        db[fld] = val
+
+        if voice:
+            vb = entry.setdefault("voice", empty_voice())
+            for fld, val in voice.items():
+                if fld in VOICE_STAT_FIELDS:
+                    vb[fld] = val  # objective — always refresh
+                elif machine and (force or _is_empty(vb.get(fld))):
+                    vb[fld] = val
+
+        entry.setdefault("generated", True)
+        return True
 
 
 def _path(episode_dir: Path) -> Path:

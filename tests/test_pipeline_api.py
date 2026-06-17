@@ -597,6 +597,46 @@ async def test_entities_get_empty_then_put_round_trip(client, tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_entities_round_trips_descriptions_and_flips_generated(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch)
+
+    # Seed a machine-generated description on disk (generated: True).
+    machine = {
+        "characters": [{
+            "canonical": "Từ An", "aliases": [],
+            "appears_in": ["C001_S01"],
+            "description": {"summary": "a censor", "appearance": "lean", "attire": "robes",
+                            "age_build": "young", "palette": "black"},
+            "voice": {"register": "low", "tone": "dry", "pace": "measured",
+                      "dominant_emotion": "mocking", "dominant_intensity": "medium", "line_count": 3},
+            "generated": True,
+        }],
+        "locations": [{"canonical": "Phòng", "aliases": [],
+                       "description": {"summary": "", "setting": "silk", "lighting": "dim",
+                                       "time_variants": ["night"]}, "generated": True}],
+    }
+    r = await client.put(f"/pipeline/episodes/{ep}/entities", json=machine)
+    assert r.status_code == 200
+    got = r.json()["characters"][0]
+    assert got["description"]["appearance"] == "lean"      # structured block round-trips
+    assert got["voice"]["register"] == "low"
+    assert got["generated"] is True                         # unchanged → stays machine-owned
+
+    # Now a human edits the appearance: generated must flip to False.
+    edited = {**machine}
+    edited["characters"] = [{**machine["characters"][0],
+                             "description": {**machine["characters"][0]["description"],
+                                             "appearance": "tall and scarred"}}]
+    r = await client.put(f"/pipeline/episodes/{ep}/entities", json=edited)
+    assert r.json()["characters"][0]["generated"] is False  # edit detected
+
+    r = await client.get(f"/pipeline/episodes/{ep}/entities")
+    c = r.json()["characters"][0]
+    assert c["description"]["appearance"] == "tall and scarred"
+    assert c["generated"] is False
+
+
+@pytest.mark.asyncio
 async def test_entities_404_for_unknown_episode(client, tmp_path, monkeypatch):
     monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
     r = await client.get("/pipeline/episodes/nope/entities")
@@ -642,8 +682,13 @@ async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
         {"scene_id": sid, "location": "L", "characters": ["A"], "shot_type": "wide",
          "action": "old", "dialogue": [], "narration": [], "mood": "m"}]}), encoding="utf-8")
 
+    # Reparse uses the beats-locator contract: the model returns anchors (not prose)
+    # and code lifts the action verbatim from the chunk source. Anchor into TINY_TXT
+    # ("Sentence one. Sentence two. " repeated); meta fields come from the model.
     returned = {"scene_id": sid, "location": "L2", "characters": ["A"], "shot_type": "medium",
-                "action": "new action", "dialogue": [], "narration": [], "mood": "calm"}
+                "mood": "calm",
+                "beats": [{"type": "action", "start_anchor": "Sentence one.",
+                           "end_anchor": "Sentence two."}]}
     with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
@@ -655,7 +700,9 @@ async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["scene"]["scene_id"] == sid
-    assert body["scene"]["action"] == "new action"
+    assert body["scene"]["location"] == "L2"           # meta carried from the model
+    assert body["scene"]["mood"] == "calm"
+    assert "Sentence one." in body["scene"]["action"]  # action lifted from source
 
 
 @pytest.mark.asyncio
