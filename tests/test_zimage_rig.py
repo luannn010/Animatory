@@ -9,7 +9,7 @@ import pytest
 
 from animatory.zimage.rig import KIND_STYLE_DEFAULTS, KINDS, Rig
 
-RIGS = Path(__file__).resolve().parents[1] / "rigs"
+RIGS = Path(__file__).resolve().parent / "fixtures" / "rigs"
 SAMPLES = {
     "character": RIGS / "character" / "rusty" / "rig.json",
     "location": RIGS / "location" / "workshop" / "rig.json",

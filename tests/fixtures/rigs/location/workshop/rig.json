@@ -1,0 +1,10 @@
+{
+  "name": "workshop",
+  "kind": "location",
+  "identity_mode": "reference",
+  "fallback_seed": 24680,
+  "fallback_refs": ["rigs/location/workshop/refs/night.png"],
+  "style_defaults": {},
+  "trained": false,
+  "appears_in": ["001", "002", "003"]
+}
