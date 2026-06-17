@@ -10,7 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from animatory import entity_registry
 from animatory.spellcheck.chunker import segment_document
 from animatory.spellcheck.checker import check_segment
-from animatory.spellcheck.naming_pass import naming_findings
+from animatory.spellcheck.naming_pass import combined_naming_findings
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ async def spellcheck_ws(websocket: WebSocket, episode_id: str, chunk_id: str):
                 "findings": [f.to_dict() for f in findings],
             })
 
-        naming = naming_findings(document)
+        naming = combined_naming_findings(document, known)
         total_findings += len(naming)
         await websocket.send_json({
             "type": "naming_findings",

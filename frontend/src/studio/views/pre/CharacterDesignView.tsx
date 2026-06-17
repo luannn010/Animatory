@@ -1,13 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { studioApi } from '../../api'
-import type { DesignAsset } from '../../types'
-import { Placeholder } from './Placeholder'
+import { GenerationStudio } from './GenerationStudio'
 
 export function CharacterDesignView() {
-  const { id = '', assetId = '' } = useParams()
-  const [assets, setAssets] = useState<DesignAsset[] | null>(null)
-  useEffect(() => { studioApi.getDesignAssets(id).then(setAssets) }, [id])
-  const chars = assets?.filter(a => a.kind === 'character') ?? null
-  return <Placeholder name="CharacterDesignView" params={{ id, assetId }} data={chars ? `${chars.length} character assets` : null} />
+  return <GenerationStudio kind="character" stages={['rough', 'bw_final', 'color', 'locked']} ratio="3 / 4" useReference />
 }

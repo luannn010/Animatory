@@ -23,7 +23,7 @@ async def test_findings_get_global_offsets_and_verify_substring():
     async def fake_call(prompt, *, label, **kw):
         return {"findings": [
             {"type": "spelling", "original": "protagnist", "suggestion": "protagonist",
-             "char_start": 4, "char_end": 14, "reason": "misspelling"},
+             "char_start": 4, "char_end": 14, "reason": "misspelling", "rule": "not-a-word"},
         ]}
 
     with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
@@ -34,6 +34,7 @@ async def test_findings_get_global_offsets_and_verify_substring():
     assert isinstance(f, Finding)
     assert f.char_start == 1004 and f.char_end == 1014   # +char_offset applied
     assert f.original == "protagnist"
+    assert f.rule == "not-a-word"                        # Layer 3: rule carried through
 
 
 @pytest.mark.asyncio
@@ -43,7 +44,7 @@ async def test_findings_with_wrong_local_span_are_dropped():
 
     async def fake_call(prompt, *, label, **kw):
         return {"findings": [
-            {"type": "spelling", "original": "zzz", "suggestion": "z",
+            {"type": "spelling", "original": "zzz", "suggestion": "z", "rule": "not-a-word",
              "char_start": 0, "char_end": 3, "reason": "x"},  # slice != original -> drop
         ]}
 
@@ -55,15 +56,16 @@ async def test_findings_with_wrong_local_span_are_dropped():
 
 @pytest.mark.asyncio
 async def test_relocates_to_occurrence_closest_to_model_start():
-    # "lan" appears 3x; model points (wrongly) near the THIRD one. The relocate
-    # fallback must bind to the closest occurrence, not the first.
-    seg = "lan ... lan ... lan done"   # indices: 0, 8, 16
+    # "qqq" appears 3x; model points (wrongly) near the THIRD one. The relocate
+    # fallback must bind to the closest occurrence, not the first. (Non-dictionary
+    # token so the same-meaning gate doesn't interfere with the relocate check.)
+    seg = "qqq ... qqq ... qqq done"   # indices: 0, 8, 16
     known = {"characters": [], "locations": []}
 
     async def fake_call(prompt, *, label, **kw):
         return {"findings": [
-            {"type": "spelling", "original": "lan", "suggestion": "làn",
-             "char_start": 15, "char_end": 18, "reason": "diacritics"},  # off-by-one near idx 16
+            {"type": "spelling", "original": "qqq", "suggestion": "qqz", "rule": "not-a-word",
+             "char_start": 15, "char_end": 18, "reason": "typo"},  # off-by-one near idx 16
         ]}
 
     with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
@@ -71,7 +73,84 @@ async def test_relocates_to_occurrence_closest_to_model_start():
 
     assert len(out) == 1
     assert out[0].char_start == 16 and out[0].char_end == 19   # closest, not first (0)
-    assert seg[out[0].char_start:out[0].char_end] == "lan"
+    assert seg[out[0].char_start:out[0].char_end] == "qqq"
+
+
+@pytest.mark.asyncio
+async def test_same_meaning_swap_is_dropped():
+    # Layer 4: 'để' and 'đó' are BOTH valid words — swapping one for the other is
+    # a meaning change, not a typo. Drop it even if the model proposes it (§7).
+    seg = "Anh để nó ở đây."
+    i = seg.index("để")
+    known = {"characters": [], "locations": []}
+
+    async def fake_call(prompt, *, label, **kw):
+        return {"findings": [
+            {"type": "spelling", "original": "để", "suggestion": "đó", "rule": "wrong-diacritic",
+             "char_start": i, "char_end": i + 2, "reason": "x"},
+        ]}
+
+    with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
+        out = await check_segment(seg, char_offset=0, known=known)
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_genuine_typo_survives():
+    # 'điễn' is NOT a valid word -> not a same-meaning swap -> the real typo
+    # correction to 'điển' survives the gate (§7).
+    seg = "Một tác phẩm cổ điễn."
+    i = seg.index("điễn")
+    known = {"characters": [], "locations": []}
+
+    async def fake_call(prompt, *, label, **kw):
+        return {"findings": [
+            {"type": "spelling", "original": "điễn", "suggestion": "điển", "rule": "wrong-diacritic",
+             "char_start": i, "char_end": i + len("điễn"), "reason": "diacritics"},
+        ]}
+
+    with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
+        out = await check_segment(seg, char_offset=0, known=known)
+    assert len(out) == 1
+    assert out[0].suggestion == "điển" and out[0].rule == "wrong-diacritic"
+
+
+@pytest.mark.asyncio
+async def test_finding_without_valid_rule_is_dropped():
+    # Layer 4: no valid rule -> invalid finding -> drop.
+    seg = "the protagnist arrived"
+    known = {"characters": [], "locations": []}
+
+    async def fake_call(prompt, *, label, **kw):
+        return {"findings": [
+            {"type": "spelling", "original": "protagnist", "suggestion": "protagonist",
+             "char_start": 4, "char_end": 14, "reason": "x"},               # no rule
+            {"type": "spelling", "original": "protagnist", "suggestion": "protagonist",
+             "char_start": 4, "char_end": 14, "reason": "x", "rule": "style"},  # bogus rule
+        ]}
+
+    with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
+        out = await check_segment(seg, char_offset=0, known=known)
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_llm_naming_type_is_dropped():
+    # Naming/consistency is owned by the deterministic Layer 2 pass now; the LLM
+    # must not adjudicate it. Any naming-typed finding from the LLM is dropped.
+    seg = "Hôm nay Tieu đến."
+    i = seg.index("Tieu")
+    known = {"characters": ["Tiêu Lan Nhi"], "locations": []}
+
+    async def fake_call(prompt, *, label, **kw):
+        return {"findings": [
+            {"type": "naming", "original": "Tieu", "suggestion": "Tiêu", "rule": "misspelled-name",
+             "char_start": i, "char_end": i + 4, "reason": "x"},
+        ]}
+
+    with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):
+        out = await check_segment(seg, char_offset=0, known=known)
+    assert out == []
 
 
 @pytest.mark.asyncio
@@ -97,7 +176,7 @@ async def test_cache_hits_skip_second_call():
         calls += 1
         return {"findings": [
             {"type": "spelling", "original": "protagnist", "suggestion": "protagonist",
-             "char_start": 4, "char_end": 14, "reason": "x"},
+             "char_start": 4, "char_end": 14, "reason": "x", "rule": "not-a-word"},
         ]}
 
     with patch("animatory.spellcheck.checker._call_qwen", side_effect=fake_call):

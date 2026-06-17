@@ -689,7 +689,7 @@ async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
                 "mood": "calm",
                 "beats": [{"type": "action", "start_anchor": "Sentence one.",
                            "end_anchor": "Sentence two."}]}
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)

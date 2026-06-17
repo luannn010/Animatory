@@ -41,7 +41,7 @@ def _make_mock_response(content: str, status: int = 200):
 
 @pytest.mark.asyncio
 async def test_parse_chunk_writes_json(tmp_path):
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -83,7 +83,7 @@ async def test_parse_chunk_retries_on_bad_json(tmp_path):
             return _make_mock_response(bad)
         return _make_mock_response(good)
 
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -98,7 +98,7 @@ async def test_parse_chunk_retries_on_bad_json(tmp_path):
 
 @pytest.mark.asyncio
 async def test_parse_chunk_fails_after_max_retries(tmp_path):
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -251,7 +251,7 @@ async def test_parse_chunk_normalizes_and_grows_registry(tmp_path):
         now="2026-06-04T00:00:00Z",
     )
 
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -284,7 +284,7 @@ async def test_parse_chunk_prompt_includes_emotions_and_known_names(tmp_path):
         captured["payload"] = kwargs.get("json")
         return _make_mock_response(json.dumps({"chunk_id": "C001", "scenes": []}))
 
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -316,7 +316,7 @@ async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
         ],
     }
     chunk_text = 'Mo dau chuong. đại cản ra lệnh: "Quỳ." Roi im lang.'
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -344,7 +344,7 @@ async def test_reparse_scene_handles_scenes_wrapper():
         "scene_id": "x", "location": "L", "shot_type": "wide", "mood": "m",
         "beats": [{"type": "narration", "start_anchor": "Canh nay", "end_anchor": "o day."}],
     }]}
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)
@@ -372,7 +372,7 @@ async def test_reparse_scene_prompt_has_anchor_and_known_names():
             "shot_type": "wide", "action": "a", "dialogue": [], "narration": [], "mood": "m",
         }))
 
-    with patch("animatory.scene_parser.httpx.AsyncClient") as MockClient:
+    with patch("animatory.llm.qwen.httpx.AsyncClient") as MockClient:
         instance = AsyncMock()
         instance.__aenter__ = AsyncMock(return_value=instance)
         instance.__aexit__ = AsyncMock(return_value=False)

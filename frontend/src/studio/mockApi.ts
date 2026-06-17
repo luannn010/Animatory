@@ -1,7 +1,7 @@
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase, GateStatus,
-  TrackId, TrackProgress, DesignAsset, StoryboardPanel, VoiceCast, VoiceOption,
-  DialogueClip, Animatic,
+  TrackId, TrackProgress, DesignAsset, GenCandidate, StoryboardPanel, VoiceCast, VoiceOption,
+  DialogueClip, Animatic, Bone, RigDoc,
 } from './types'
 import { PHASE_ORDER, PRE_TRACKS } from './phases'
 
@@ -124,7 +124,16 @@ function seedDesignAssets(projectId: string): DesignAsset[] {
     { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
     { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
   ]
-  return base.map((a, i) => ({ ...a, id: `${projectId}-da${i + 1}`, projectId, candidates: [] }))
+  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, bw_final: 3, color: 4, locked: 3 }
+  return base.map((a, i) => {
+    const id = `${projectId}-da${i + 1}`
+    const n = COUNT[a.stage]
+    const candidates: GenCandidate[] = Array.from({ length: n }, (_, j) => ({
+      id: `${id}-c${j + 1}`, url: '', runId: null, prompt: a.promptText, createdAt: '2026-06-02T00:00:00Z',
+      selected: j === 0 && a.stage !== 'rough',
+    }))
+    return { ...a, id, projectId, candidates }
+  })
 }
 
 function seedStoryboardPanels(projectId: string, sceneId?: string): StoryboardPanel[] {
@@ -174,14 +183,33 @@ function seedAnimatic(projectId: string): Animatic {
   }
 }
 
+// A small demo skeleton so the rig editor isn't empty before art import: a spine
+// up from the canvas, a neck, and one arm. Children's x/y are ignored (their
+// pivot is the parent's tip); only the root's position is meaningful.
+function seedRig(assetId: string): RigDoc {
+  const b = (id: string, name: string, parent: string | null, x: number, y: number, len: number, angle: number): Bone =>
+    ({ id, name, parent, x, y, len, angle, mesh: null })
+  return {
+    schema: 'animatory.rig/v1', assetId,
+    skeleton: [
+      b('b1', 'spine', null, 260, 320, 90, -Math.PI / 2),
+      b('b2', 'neck', 'b1', 0, 0, 40, -Math.PI / 2),
+      b('b3', 'arm_L', 'b1', 0, 0, 70, -Math.PI / 4),
+    ],
+    clips: [{ name: 'action_01', duration_s: 1, keyframes: [] }],
+  }
+}
+
 // ── in-memory state ──────────────────────────────────────────────────────────
 
 let projects: Project[] = seedProjects()
 let newProjectCounter = 0
+let rigs: Record<string, RigDoc> = {}
 
 export function __resetStudioState(): void {
   projects = seedProjects()
   newProjectCounter = 0
+  rigs = {}
 }
 
 function find(id: string): Project {
@@ -263,5 +291,13 @@ export const studioApi = {
   },
   async getAnimatic(projectId: string): Promise<Animatic> {
     await delay(); find(projectId); return seedAnimatic(projectId)
+  },
+
+  // ── Rig editor (bones-only v1) ─────────────────────────────────────────────
+  async getRig(assetId: string): Promise<RigDoc> {
+    await delay(); return clone(rigs[assetId] ?? seedRig(assetId))
+  },
+  async saveRig(doc: RigDoc): Promise<RigDoc> {
+    await delay(80); rigs[doc.assetId] = clone(doc); return clone(doc)
   },
 }
