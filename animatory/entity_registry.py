@@ -22,11 +22,17 @@ class EntityRegistry:
         episode_id: str,
         characters: list[dict] | None = None,
         locations: list[dict] | None = None,
+        items: list[dict] | None = None,
         updated_at: str | None = None,
     ) -> None:
         self.episode_id = episode_id
         self.characters: list[dict] = characters or []
         self.locations: list[dict] = locations or []
+        # Recurring "special items" (props). Same {canonical, aliases[]} shape as the
+        # other rosters, optionally carrying {description, appears_in[]} from the LLM
+        # extractor. Items are not a structured scene field, so they are learned
+        # separately via ``learn_items`` rather than ``learn``.
+        self.items: list[dict] = items or []
         self.updated_at = updated_at
 
     def to_dict(self) -> dict:
@@ -35,6 +41,7 @@ class EntityRegistry:
             "updated_at": self.updated_at,
             "characters": self.characters,
             "locations": self.locations,
+            "items": self.items,
         }
 
     @classmethod
@@ -43,6 +50,7 @@ class EntityRegistry:
             episode_id=d.get("episode_id", ""),
             characters=d.get("characters", []),
             locations=d.get("locations", []),
+            items=d.get("items", []),
             updated_at=d.get("updated_at"),
         )
 
@@ -50,6 +58,7 @@ class EntityRegistry:
         return {
             "characters": [e["canonical"] for e in self.characters],
             "locations": [e["canonical"] for e in self.locations],
+            "items": [e["canonical"] for e in self.items],
         }
 
     def _alias_map(self, entries: list[dict]) -> dict:
@@ -109,6 +118,34 @@ class EntityRegistry:
             for d in s.get("dialogue", []) or []:
                 if isinstance(d, dict):
                     add(d.get("character", ""), self.characters, char_keys)
+        return self
+
+    def learn_items(self, items: list[dict]) -> "EntityRegistry":
+        """Merge LLM-extracted recurring items into the registry. Each item is a dict with
+        at least ``canonical`` (or ``name``), optionally ``aliases``/``description``/
+        ``appears_in``. A name already known as a character or location is skipped, so a
+        prop is never double-filed as a person/place. Idempotent on the canonical key."""
+        item_keys = {_key(e["canonical"]) for e in self.items}
+        item_keys |= {_key(a) for e in self.items for a in e.get("aliases", [])}
+        reserved = {_key(e["canonical"]) for e in self.characters}
+        reserved |= {_key(a) for e in self.characters for a in e.get("aliases", [])}
+        reserved |= {_key(e["canonical"]) for e in self.locations}
+        reserved |= {_key(a) for e in self.locations for a in e.get("aliases", [])}
+
+        for it in items or []:
+            name = (it.get("canonical") or it.get("name") or "").strip()
+            if not name:
+                continue
+            k = _key(name)
+            if k in reserved or k in item_keys:
+                continue
+            entry = {"canonical": name, "aliases": list(it.get("aliases", []))}
+            if it.get("description"):
+                entry["description"] = it["description"]
+            if it.get("appears_in"):
+                entry["appears_in"] = list(it["appears_in"])
+            self.items.append(entry)
+            item_keys.add(k)
         return self
 
 

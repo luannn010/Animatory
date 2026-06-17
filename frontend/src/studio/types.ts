@@ -30,7 +30,8 @@ export interface Asset {
   name: string
   type: AssetType
   status: AssetStatus
-  emoji: string              // placeholder thumbnail
+  emoji: string              // placeholder thumbnail (shown until a real rig ref exists)
+  thumbnailUrl?: string      // rig reference image (OutputArtifact.artifact_url) when built
 }
 
 export type VendorStage = 'rigs' | 'setup' | 'block' | 'animate' | 'take1' | 'editor'

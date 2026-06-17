@@ -684,6 +684,30 @@ async def test_reparse_route_409_when_not_parsed(client, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reparse_route_503_when_chat_down(client, tmp_path, monkeypatch):
+    """When the chat model is unreachable and can't be woken, reparse fails fast with 503."""
+    monkeypatch.setenv("CHAT_PREFLIGHT", "1")
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rpdown")
+    ep_dir = tmp_path / ep
+    manifest = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
+    cid = manifest["chunks"][0]["chunk_id"]
+    sid = f"{cid}_S01"
+    (ep_dir / f"{cid}_scenes.json").write_text(json.dumps({"chunk_id": cid, "scenes": [
+        {"scene_id": sid, "location": "L", "characters": [], "shot_type": "wide",
+         "action": "old", "dialogue": [], "narration": [], "mood": "m"}]}), encoding="utf-8")
+
+    async def _down(endpoint, timeout_s):
+        return False
+
+    monkeypatch.setattr("animatory.scene_parser._chat_reachable", _down)
+    monkeypatch.setattr("animatory.zimage.brain.BrainClient.wake", lambda self, model=None: False)
+
+    r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{sid}/reparse")
+    assert r.status_code == 503
+    assert "not reachable" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_scene_source_route_returns_match(client, tmp_path, monkeypatch):
     ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="srctest")
     import json as _json

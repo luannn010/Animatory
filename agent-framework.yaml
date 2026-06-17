@@ -175,6 +175,27 @@ execution_layer:
       outputs: [{name: mouth_charts, type: image, path: mouth_charts/}]
       acceptance: ["language-agnostic mapping", "aligned to dialogue timing"]
 
+    - id: design.rig
+      role: "Z-Image Rig Builder (character / location / item)"
+      responsibility: "Build a reusable rig.json (+ reference image) per entity; LoRA for hero characters, reference+locked-seed for locations and items"
+      stack: image
+      gpu_required: true
+      consistency_ref: character_bible
+      inputs:  [{name: entities, type: json, required: true}]
+      outputs: [{name: rigs, type: file, path: rigs/}]
+      acceptance: ["one rig.json per entity", "reference image per non-LoRA rig", "kind in [character, location, item]"]
+
+    - id: board.panels
+      role: "Z-Image Panel Generator"
+      responsibility: "Generate one storyboard panel per enriched shot, referencing rigs by name; write png + reproduction sidecar"
+      stack: image
+      gpu_required: true
+      consistency_ref: character_bible
+      inputs:  [{name: shots, type: json, required: true},
+                {name: rigs, type: file, required: true}]
+      outputs: [{name: panels, type: image, path: panels/}]
+      acceptance: ["one panel per shot", "sidecar reproduces frame", "same identity across shots"]
+
   text:
     - id: board.storyboard
       role: "Storyboard -> Animatic"

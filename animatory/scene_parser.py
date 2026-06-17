@@ -234,6 +234,70 @@ def _qwen_env(
     return endpoint, model_name, retries, timeout_s, enable_thinking
 
 
+class ChatUnavailableError(RuntimeError):
+    """The chat/LLM endpoint is unreachable (e.g. hibernated for image generation) and
+    could not be woken. Carries an actionable, user-facing message. The parse/reparse
+    preflight raises this *before* the expensive 3x retry loop so the failure is fast and
+    clear (the API maps it to HTTP 503)."""
+
+
+async def _chat_reachable(endpoint: str, timeout_s: float) -> bool:
+    """True if the chat server answers ``GET /v1/models`` with 200."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            resp = await client.get(f"{endpoint}/v1/models")
+            return resp.status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+async def ensure_chat_available(
+    endpoint: str,
+    *,
+    probe_timeout_s: float = 3.0,
+    wake_wait_s: float = 45.0,
+    poll_s: float = 3.0,
+) -> None:
+    """Preflight the chat endpoint before parsing/reparsing.
+
+    If reachable, return immediately. Otherwise try to wake the brain via the workerd
+    control plane and poll until the chat server comes up. If it stays down (or the control
+    plane is disabled/unreachable), raise :class:`ChatUnavailableError` with an actionable
+    message — failing fast instead of grinding through the per-call retry loop and dumping a
+    503 traceback.
+
+    Disabled (no-op) when ``CHAT_PREFLIGHT`` != "1" (tests set it off; production leaves it on).
+    """
+    if os.environ.get("CHAT_PREFLIGHT", "1") != "1":
+        return
+    if await _chat_reachable(endpoint, probe_timeout_s):
+        return
+
+    woke = False
+    try:
+        from animatory.zimage import brain  # local import: optional control-plane dependency
+
+        woke = await asyncio.to_thread(brain.BrainClient().wake)
+    except Exception as exc:  # pragma: no cover - control plane is optional
+        logger.debug("[chat] brain wake attempt failed: %s", exc)
+
+    if woke:
+        logger.info("[chat] brain wake requested; waiting up to %.0fs for %s", wake_wait_s, endpoint)
+        deadline = asyncio.get_event_loop().time() + wake_wait_s
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(poll_s)
+            if await _chat_reachable(endpoint, probe_timeout_s):
+                logger.info("[chat] %s is up after brain wake", endpoint)
+                return
+
+    raise ChatUnavailableError(
+        f"chat model is not reachable at {endpoint} — it may be hibernated for image "
+        "generation. Start the chat server on that port, or enable the brain control plane "
+        "(BRAIN_CONTROL_ENABLED, plus BRAIN_VIA_WSL on Windows) so it can be woken "
+        "automatically, then retry."
+    )
+
+
 async def _call_qwen(
     prompt: str,
     *,
@@ -715,6 +779,7 @@ async def reparse_scene(
     endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(
         qwen_endpoint, model, max_retries
     )
+    await ensure_chat_available(endpoint)  # fast, clear error if the chat model is down
     known = registry.known_names()
     prompt = _REPARSE_TEMPLATE.format(
         scene_id=scene_id,
@@ -789,6 +854,9 @@ async def parse_episode(
         "[parse_episode] episode=%s dir=%s parsing %d/%d chunk(s)",
         episode_id, episode_dir, total, len(manifest["chunks"]),
     )
+    # Fail fast (and try to wake the brain) if the chat model is down, instead of grinding
+    # through per-chunk retries and dumping a 503 traceback into the run record.
+    await ensure_chat_available(_qwen_env(qwen_endpoint)[0])
     if on_progress is not None:
         await on_progress(0, total, "")
 

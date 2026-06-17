@@ -27,6 +27,7 @@ from animatory.base_agent import BaseAgent
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor
 from animatory.executors.llamacpp import LlamaCppExecutor
+from animatory.executors.zimage import ZImageExecutor
 from animatory.studio.router import router as studio_router
 from animatory.studio.store import StudioStore
 
@@ -61,14 +62,25 @@ async def lifespan(app: FastAPI):
     store = InMemoryRunStore() if db_path == ":memory:" else RunStore(db_path)
     await store.init()
 
+    # One Z-Image engine instance is shared by the rig-pipeline executor and the imagegen
+    # API so there is a single VRAM owner on the 8GB card (built only when torch/diffusers
+    # are present; otherwise both degrade gracefully).
+    from animatory.zimage.config import ZImageConfig
+    image_cfg = ZImageConfig()
+    image_engine = None
+
     if os.environ.get("ANIMATORY_FAKE_EXECUTORS", "0") == "1":
         fake = FakeExecutor()
         executor_map = {s: fake for s in ["comfyui", "text", "orchestration", "audio", "image", "video", "utility"]}
     else:
+        from animatory.zimage.engine import ZImageEngine, deps_available
+        if deps_available():
+            image_engine = ZImageEngine(image_cfg)
         executor_map: dict = {
             "comfyui": ComfyUIExecutor(),
             "text": LlamaCppExecutor(),
             "orchestration": LlamaCppExecutor(),
+            "image": ZImageExecutor(config=image_cfg, engine=image_engine),   # Z-Image rig/panel pipeline
         }
 
     studio_store = StudioStore(db_path=db_path)
@@ -77,15 +89,27 @@ async def lifespan(app: FastAPI):
     chat_store = InMemoryChatStore() if db_path == ":memory:" else ChatStore(db_path)
     await chat_store.init()
 
+    # imagegen: thin image API (POST /imagegen/generate ...) sharing the engine + brain gate.
+    from animatory.imagegen.jobs import ImageJobStore
+    from animatory.imagegen.lora import LoraRegistry
+    image_job_store = ImageJobStore(db_path)
+    await image_job_store.init()
+
     app.state.registry = registry
     app.state.store = store
     app.state.executor_map = executor_map
     app.state.studio_store = studio_store
     app.state.chat_store = chat_store
+    app.state.image_job_store = image_job_store
+    app.state.lora_registry = LoraRegistry()
+    app.state.image_engine = image_engine
+    app.state.image_cfg = image_cfg
+    app.state.image_out_dir = str(image_cfg.out_dir)
 
     yield
 
     await studio_store.close()
+    await image_job_store.close()
 
 
 app = FastAPI(title="Animatory Backend", version="0.1.0", lifespan=lifespan)
@@ -108,6 +132,16 @@ from animatory.pipeline_router import router as pipeline_router
 app.include_router(pipeline_router)
 from animatory.spellcheck.router import router as spellcheck_router
 app.include_router(spellcheck_router)
+from animatory.imagegen.router import router as imagegen_router
+app.include_router(imagegen_router)
+
+# Serve generated images so JobView.image_url resolves over HTTP (Z-Image artifacts
+# otherwise live only on disk). The directory is created so StaticFiles can mount it.
+from pathlib import Path as _Path
+from fastapi.staticfiles import StaticFiles
+_outputs_dir = _Path(os.environ.get("ZIMAGE_OUT_DIR", "out"))
+_outputs_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/outputs", StaticFiles(directory=str(_outputs_dir)), name="outputs")
 
 
 @app.get("/health")
