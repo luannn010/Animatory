@@ -1,0 +1,14 @@
+{
+  "name": "rusty",
+  "kind": "character",
+  "identity_mode": "lora",
+  "lora_path": "rigs/character/rusty/lora.safetensors",
+  "lora_strength": 0.9,
+  "trigger": "rustychar",
+  "fallback_seed": 12345,
+  "fallback_refs": ["rigs/character/rusty/refs/front.png"],
+  "style_defaults": {},
+  "trained": false,
+  "train_notes": "untrained; falls back to reference+locked-seed until LoRA is built",
+  "appears_in": ["001", "002", "003", "004"]
+}

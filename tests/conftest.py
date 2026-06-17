@@ -8,6 +8,8 @@ os.environ.setdefault("ANIMATORY_FAKE_EXECUTORS", "1")
 os.environ.setdefault("DB_PATH", ":memory:")
 # Keep existing single-pass parser tests deterministic; two-phase tests opt in.
 os.environ.setdefault("QWEN_TWO_PHASE", "0")
+# The chat-availability preflight hits the network; off by default in tests (opt in per-test).
+os.environ.setdefault("CHAT_PREFLIGHT", "0")
 
 # aiosqlite spawns one *non-daemon* worker thread per connection
 # (core.py: `Thread(target=_connection_worker_thread, ...)`). Tests create many
