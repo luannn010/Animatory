@@ -1,0 +1,10 @@
+{
+  "name": "glowing bolt",
+  "kind": "item",
+  "identity_mode": "reference",
+  "fallback_seed": 13579,
+  "fallback_refs": ["rigs/item/glowing_bolt/refs/main.png"],
+  "style_defaults": {},
+  "trained": false,
+  "appears_in": ["001", "003"]
+}

@@ -36,7 +36,7 @@ def test_known_names_lists_canonicals(tmp_path):
         locations=[{"canonical": "Palace", "aliases": []}],
     )
     known = reg.known_names()
-    assert known == {"characters": ["Tư An"], "locations": ["Palace"]}
+    assert known == {"characters": ["Tư An"], "locations": ["Palace"], "items": []}
 
 
 def _reg():

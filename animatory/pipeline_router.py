@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from animatory import entity_registry, scene_source
 from animatory.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
-from animatory.scene_parser import parse_episode, reparse_scene
+from animatory.scene_parser import ChatUnavailableError, parse_episode, reparse_scene
 from animatory.chat_engine import stream_chat, generate_title
 from animatory.voice_profiles import aggregate
 from sse_starlette.sse import EventSourceResponse
@@ -412,10 +412,13 @@ async def reparse_chunk_scene(episode_id: str, chunk_id: str, scene_id: str):
 
     chunk_text = _text_payload(ep_dir, chunk_id, meta)["text"]
     registry = entity_registry.load(episode_id, ep_dir)
-    scene = await reparse_scene(
-        chunk_id=chunk_id, chunk_text=chunk_text, anchor_scene=anchor,
-        registry=registry, scene_id=scene_id,
-    )
+    try:
+        scene = await reparse_scene(
+            chunk_id=chunk_id, chunk_text=chunk_text, anchor_scene=anchor,
+            registry=registry, scene_id=scene_id,
+        )
+    except ChatUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     logger.info("[reparse] episode=%s chunk=%s scene=%s done", episode_id, chunk_id, scene_id)
     return {"scene": scene}
 
