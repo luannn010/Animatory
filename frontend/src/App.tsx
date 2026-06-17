@@ -19,6 +19,7 @@ import { AudioCastingView } from './studio/views/pre/AudioCastingView'
 import { DialogueStudioView } from './studio/views/pre/DialogueStudioView'
 import { AnimaticView } from './studio/views/pre/AnimaticView'
 import { CheckingGateView } from './studio/views/pre/CheckingGateView'
+import { RigEditorView } from './studio/views/pre/RigEditorView'
 import { ProductionView } from './studio/views/ProductionView'
 import { PostView } from './studio/views/PostView'
 
@@ -38,6 +39,9 @@ export default function App() {
           <Route path="design/character/:assetId" element={<CharacterDesignView />} />
           <Route path="design/location/:assetId" element={<LocationDesignView />} />
           <Route path="design/prop/:assetId" element={<PropDesignView />} />
+          {/* Rig editor (bones-only v1) — a property of a character Asset */}
+          <Route path="rig" element={<RigEditorView />} />
+          <Route path="rig/:assetId" element={<RigEditorView />} />
           <Route path="storyboard" element={<StoryboardTrackView />} />
           <Route path="storyboard/scene/:sceneId" element={<PanelBoardView />} />
           <Route path="audio" element={<AudioCastingView />} />

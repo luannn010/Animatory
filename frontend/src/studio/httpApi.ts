@@ -1,7 +1,7 @@
 import { API_BASE_URL } from '../config'
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase,
-  DesignAsset, StoryboardPanel, VoiceCast, VoiceOption, DialogueClip, Animatic,
+  DesignAsset, StoryboardPanel, VoiceCast, VoiceOption, DialogueClip, Animatic, RigDoc,
 } from './types'
 
 const notImpl = (name: string): never => {
@@ -52,6 +52,10 @@ export const studioHttpApi = {
   getVoiceOptions: (): Promise<VoiceOption[]> => notImpl('getVoiceOptions'),
   getDialogueClips: (_projectId: string, _sceneId?: string): Promise<DialogueClip[]> => notImpl('getDialogueClips'),
   getAnimatic: (_projectId: string): Promise<Animatic> => notImpl('getAnimatic'),
+
+  // Rig editor — real route TBD; mock is the source of truth for now.
+  getRig: (assetId: string): Promise<RigDoc> => http<RigDoc>(`/rigs/${assetId}`),
+  saveRig: (doc: RigDoc): Promise<RigDoc> => http<RigDoc>(`/rigs/${doc.assetId}`, { method: 'PUT', body: JSON.stringify(doc) }),
 }
 
 // ── Live-only extras (model seams) ────────────────────────────────────────────

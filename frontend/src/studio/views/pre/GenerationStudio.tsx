@@ -110,10 +110,11 @@ export function GenerationStudio({ kind, stages, ratio, useReference, useTags }:
   }
 
   return <StudioBody key={asset.id} asset={asset} kind={kind} stages={stages} ratio={ratio}
-    useReference={useReference} useTags={useTags} onBack={() => navigate(`/project/${id}/pre/design`)} />
+    useReference={useReference} useTags={useTags} onBack={() => navigate(`/project/${id}/pre/design`)}
+    onOpenRig={kind === 'character' ? () => navigate(`/project/${id}/pre/rig/${asset.id}`) : undefined} />
 }
 
-function StudioBody({ asset, kind, stages, ratio, useReference, useTags, onBack }: Config & { asset: DesignAsset; onBack: () => void }) {
+function StudioBody({ asset, kind, stages, ratio, useReference, useTags, onBack, onOpenRig }: Config & { asset: DesignAsset; onBack: () => void; onOpenRig?: () => void }) {
   const [stage, setStage] = useState<DesignStage>(asset.stage)
   const [prompt, setPrompt] = useState(asset.promptText)
   const [generating, setGenerating] = useState(false)
@@ -155,9 +156,14 @@ function StudioBody({ asset, kind, stages, ratio, useReference, useTags, onBack 
       <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
         {/* Brief */}
         <aside className="flex flex-col gap-4">
-          <div>
-            <h1 className="text-lg font-semibold text-ink">{asset.displayName}</h1>
-            <span className="font-mono text-xs text-stone">{asset.id}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h1 className="text-lg font-semibold text-ink">{asset.displayName}</h1>
+              <span className="font-mono text-xs text-stone">{asset.id}</span>
+            </div>
+            {onOpenRig && (
+              <Button size="sm" variant="secondary" icon="layers" onClick={onOpenRig}>Open rig editor</Button>
+            )}
           </div>
 
           <Textarea label="Generation prompt" rows={kind === 'prop' ? 4 : 6} value={prompt} onChange={e => setPrompt(e.target.value)} />
