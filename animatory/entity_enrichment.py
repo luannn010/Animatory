@@ -49,8 +49,9 @@ def _clip(text: str, budget: int) -> str:
 
 
 def _default_call_fn() -> CallFn:
-    # Lazy import keeps scene_parser free to import this module at function scope.
-    from animatory.scene_parser import _call_qwen
+    # Qwen client now lives in animatory.llm.qwen — no dependency on scene_parser,
+    # so the old scene_parser <-> entity_enrichment import cycle is gone.
+    from animatory.llm.qwen import _call_qwen
     return _call_qwen
 
 

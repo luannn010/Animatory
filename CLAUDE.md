@@ -106,6 +106,43 @@ See `docs/superpowers/specs/2026-06-08-streaming-spellcheck-design.md`.
   segments), `complete`, and per-segment `error` (one bad segment never aborts
   the stream). This route is additive — do not change existing contract routes.
 
+### Layered filters around the LLM (deterministic gates — do not weaken)
+
+The LLM is NOT the sole judge. A finding must survive several **deterministic
+code gates** before a human sees it. This killed a 297→~7 false-positive flood
+(mostly `NAMING` on single-syllable Vietnamese function words like `đừng`, `để`,
+`đó`, `đời`). The layers (code: `animatory/spellcheck/`):
+
+- **L1 dictionary gate** — `dictionary.is_valid_word` over the vendored vi_VN
+  Hunspell wordlist (`spellcheck/data/vi_VN.dic`, see `vi_VN.LICENSE`). A valid
+  Vietnamese word is never a naming/consistency error. **Never silently skip
+  this** if the wordlist is missing — `load_wordlist` raises loudly.
+- **L2 registry naming** — `naming_pass.registry_name_findings` +
+  `naming_findings`, merged/deduped by `combined_naming_findings`. Edit-distance
+  near-misses of registered/dominant names, EXCLUDING valid dictionary words.
+  Naming/consistency is owned HERE, in code — **not by the LLM**.
+- **L3 LLM = typos only** — `checker._TEMPLATE` is constrained to typos
+  (`not-a-word | wrong-diacritic | misspelled-name`, carried in an additive
+  `rule` field); low temperature (`SPELLCHECK_TEMPERATURE`, default 0.1, passed
+  via `_call_qwen(temperature=…)`). The LLM does the one thing code cannot:
+  real-word-in-context errors.
+- **L4 same-meaning gate** — `checker._coerce_local` drops a finding with no
+  valid `rule`, drops `type:naming` from the LLM, and **drops a swap where BOTH
+  `original` and `suggestion` are valid words** (e.g. `để → đó` — a meaning
+  change, not a typo), on top of the existing substring/relocate checks.
+
+**Wordlist, NOT fine-tuning** — a wordlist is a deterministic gate (microseconds,
+a guarantee on every chunk, free, ages well as new chapter names appear). A
+fine-tuned Q4 9B only shifts a tendency, still emits unpredictable false
+positives, and costs a labeled dataset. The wordlist's one blind spot
+(real-word-in-context errors) is exactly what L3's constrained LLM covers.
+
+**Consistency = pinned glossary, NOT a decaying/sliding context window.** Known
+names are computed once and passed identically into every segment's check, so
+chunk 1 and chunk 7 agree by construction. Do NOT "improve" this into a sliding
+window — a decaying window makes chunks disagree; a growing one smears attention
+into more false "differs from earlier".
+
 ---
 
 ## Backend MVP
