@@ -9,8 +9,8 @@ Factored from the proven feasibility script. Runs a *correct* rectified-flow tra
 transformer (QLoRA) + grad checkpointing; the VAE and text encoder are used ONCE to precompute
 latents/embeddings, then moved to CPU so only the DiT is resident during the loop.
 
-torch/diffusers/peft are imported lazily inside ``train_lora`` so importing this module is cheap
-(the package and tests don't drag in the heavy stack). Runs as a subprocess via the CLI at the
+torch/diffusers/peft/PIL are imported lazily inside ``train_lora`` so importing this module is
+cheap (the package and tests don't drag in the heavy stack). Runs as a subprocess via the CLI at the
 bottom; emits progress to a JSON file the parent worker polls.
 """
 
@@ -21,8 +21,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-
-from PIL import Image  # light dependency; heavy torch/diffusers/peft stay lazy inside train_lora
 
 from animatory.zimage.train import _slug, mark_trained
 
@@ -87,6 +85,7 @@ def train_lora(
     from diffusers import ZImagePipeline
     from diffusers.quantizers import PipelineQuantizationConfig
     from peft import LoraConfig, get_peft_model_state_dict
+    from PIL import Image
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA not available — LoRA training needs the GPU box.")
