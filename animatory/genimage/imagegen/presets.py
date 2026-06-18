@@ -6,7 +6,7 @@ on any object exposing the request fields by attribute, so prompt building stays
 
 These presets are the *direct image API* vocabulary (rig / background / shot). They are distinct
 from the storyboard rig-pipeline's ``character`` / ``location`` / ``item`` kinds in
-``animatory.zimage.rig`` — both vocabularies drive the same engine but serve different callers.
+``animatory.genimage.zimage.rig`` — both vocabularies drive the same engine but serve different callers.
 
 The ``background`` plate defaults to 1920x1080 per spec. On an 8GB card that resolution is
 risky even with NF4 + model offload, so the size is env-overridable

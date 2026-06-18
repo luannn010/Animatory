@@ -22,7 +22,7 @@ import logging
 import sys
 from pathlib import Path
 
-from animatory.zimage.train import _slug, mark_trained
+from animatory.genimage.zimage.train import _slug, mark_trained
 
 logger = logging.getLogger(__name__)
 

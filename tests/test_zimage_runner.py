@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import warnings
 
-from animatory.zimage.rig import Rig
-from animatory.zimage.runner import run_batch
-from animatory.zimage.shots import Shot
+from animatory.genimage.zimage.rig import Rig
+from animatory.genimage.zimage.runner import run_batch
+from animatory.genimage.zimage.shots import Shot
 
 
 class _FakeImage:

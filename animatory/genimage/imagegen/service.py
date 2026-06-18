@@ -25,9 +25,9 @@ import random
 import sys
 from pathlib import Path
 
-from animatory.imagegen.lora import LoraNotFound, LoraRegistry
-from animatory.imagegen.presets import apply_defaults, build_prompts
-from animatory.zimage.train import _slug
+from animatory.genimage.imagegen.lora import LoraNotFound, LoraRegistry
+from animatory.genimage.imagegen.presets import apply_defaults, build_prompts
+from animatory.genimage.zimage.train import _slug
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,10 @@ def _oom_guidance(asset_type: str, msg: str) -> str:
 
 def _acquire_vram(engine, needed_mb: int | None) -> dict:
     """Free the GPU for a *real* engine that isn't loaded yet; no-op for fakes / hot engines."""
-    from animatory.zimage.engine import ZImageEngine
+    from animatory.genimage.zimage.engine import ZImageEngine
 
     if isinstance(engine, ZImageEngine) and not engine.is_loaded:
-        from animatory.zimage import brain
+        from animatory.genimage.zimage import brain
 
         return brain.ensure_vram_for_zimage(needed_mb)
     return {}
@@ -78,14 +78,14 @@ def _acquire_vram(engine, needed_mb: int | None) -> dict:
 
 def _release_gpu(engine, brain_state: dict) -> None:
     """Drop a real pipeline (so the brain's JIT wake doesn't OOM) and restore the brain."""
-    from animatory.zimage.engine import ZImageEngine
+    from animatory.genimage.zimage.engine import ZImageEngine
 
     if not isinstance(engine, ZImageEngine):
         return
     if os.environ.get("ZIMAGE_RELEASE_AFTER", "1") == "1":
         engine.release()
     if brain_state:
-        from animatory.zimage import brain
+        from animatory.genimage.zimage import brain
 
         brain.restore_brain(brain_state)
 
@@ -243,7 +243,7 @@ async def run_train_job(store, engine, job_id: str, cfg: dict, *, run_cmd=_defau
     progress_path = str(prog_dir / f"{job_id}.json")
 
     cmd = [
-        sys.executable, "-m", "animatory.imagegen.lora_train",
+        sys.executable, "-m", "animatory.genimage.imagegen.lora_train",
         "--name", cfg["name"], "--refs", str(cfg["refs_dir"]),
         "--out", str(lora_dir), "--rigs", str(rigs_dir),
         "--steps", str(cfg.get("steps", 1500)), "--rank", str(cfg.get("rank", 8)),
@@ -260,7 +260,7 @@ async def run_train_job(store, engine, job_id: str, cfg: dict, *, run_cmd=_defau
 
     async with _gpu_lock:
         # Free the card for the subprocess: drop any resident in-process pipeline.
-        from animatory.zimage.engine import ZImageEngine
+        from animatory.genimage.zimage.engine import ZImageEngine
         if isinstance(engine, ZImageEngine):
             engine.release()
 

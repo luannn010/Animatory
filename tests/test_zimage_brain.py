@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from animatory.zimage.brain import (
+from animatory.genimage.zimage.brain import (
     BrainClient,
     BrainConfig,
     ensure_vram_for_zimage,

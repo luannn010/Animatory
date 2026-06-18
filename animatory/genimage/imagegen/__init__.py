@@ -1,7 +1,7 @@
 """Image-generation API surface (BACKEND_SPEC.md).
 
-A thin layer over the existing Z-Image engine (``animatory.zimage.engine``) and the GPU/VRAM
-arbiter (``animatory.zimage.brain``). It exposes the spec's ergonomic, asset-type-oriented HTTP
+A thin layer over the existing Z-Image engine (``animatory.genimage.zimage.engine``) and the GPU/VRAM
+arbiter (``animatory.genimage.zimage.brain``). It exposes the spec's ergonomic, asset-type-oriented HTTP
 API (``POST /generate`` etc.) without standing up a second GPU-owning service — the single 8GB
 card can only feed one consumer at a time, so the worker here shares the backend's engine and
 serializes inference behind a process-level lock.
@@ -14,8 +14,8 @@ Public surface:
 - ``router`` (``router``)
 """
 
-from animatory.imagegen.presets import AssetType, PRESETS, apply_defaults, build_prompts
-from animatory.imagegen.lora import LoraRegistry, LoraNotFound
+from animatory.genimage.imagegen.presets import AssetType, PRESETS, apply_defaults, build_prompts
+from animatory.genimage.imagegen.lora import LoraRegistry, LoraNotFound
 
 __all__ = [
     "AssetType",

@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     # One Z-Image engine instance is shared by the rig-pipeline executor and the imagegen
     # API so there is a single VRAM owner on the 8GB card (built only when torch/diffusers
     # are present; otherwise both degrade gracefully).
-    from animatory.zimage.config import ZImageConfig
+    from animatory.genimage.zimage.config import ZImageConfig
     image_cfg = ZImageConfig()
     image_engine = None
 
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
         fake = FakeExecutor()
         executor_map = {s: fake for s in ["comfyui", "text", "orchestration", "audio", "image", "video", "utility"]}
     else:
-        from animatory.zimage.engine import ZImageEngine, deps_available
+        from animatory.genimage.zimage.engine import ZImageEngine, deps_available
         if deps_available():
             image_engine = ZImageEngine(image_cfg)
         executor_map: dict = {
@@ -90,8 +90,8 @@ async def lifespan(app: FastAPI):
     await chat_store.init()
 
     # imagegen: thin image API (POST /imagegen/generate ...) sharing the engine + brain gate.
-    from animatory.imagegen.jobs import ImageJobStore
-    from animatory.imagegen.lora import LoraRegistry
+    from animatory.genimage.imagegen.jobs import ImageJobStore
+    from animatory.genimage.imagegen.lora import LoraRegistry
     image_job_store = ImageJobStore(db_path)
     await image_job_store.init()
 
@@ -132,7 +132,7 @@ from animatory.pipeline_router import router as pipeline_router
 app.include_router(pipeline_router)
 from animatory.spellcheck.router import router as spellcheck_router
 app.include_router(spellcheck_router)
-from animatory.imagegen.router import router as imagegen_router
+from animatory.genimage.imagegen.router import router as imagegen_router
 app.include_router(imagegen_router)
 
 # Serve generated images so JobView.image_url resolves over HTTP (Z-Image artifacts

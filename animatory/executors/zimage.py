@@ -25,10 +25,10 @@ from pathlib import Path
 
 from animatory.executors.base import AbstractExecutor
 from animatory.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest
-from animatory.zimage.config import ZImageConfig
-from animatory.zimage.rig import Rig
-from animatory.zimage.runner import run_batch
-from animatory.zimage.shots import Shot
+from animatory.genimage.zimage.config import ZImageConfig
+from animatory.genimage.zimage.rig import Rig
+from animatory.genimage.zimage.runner import run_batch
+from animatory.genimage.zimage.shots import Shot
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +73,10 @@ class ZImageExecutor(AbstractExecutor):
     # -- GPU arbitration (shared 8GB card: brain LLM vs Z-Image) --------------------
     def _acquire_gpu(self, engine) -> None:
         """Before the heavy pipeline loads: free VRAM, hibernating the brain if needed."""
-        from animatory.zimage.engine import ZImageEngine
+        from animatory.genimage.zimage.engine import ZImageEngine
 
         if isinstance(engine, ZImageEngine) and not engine.is_loaded:
-            from animatory.zimage import brain
+            from animatory.genimage.zimage import brain
 
             self._brain_state = brain.ensure_vram_for_zimage()
 
@@ -84,14 +84,14 @@ class ZImageExecutor(AbstractExecutor):
         """After a batch: drop the pipeline (so the brain's JIT wake doesn't OOM
         against our resident ~4.6GB) and restore the brain if we hibernated it.
         Disable with ZIMAGE_RELEASE_AFTER=0 to keep the pipeline hot between runs."""
-        from animatory.zimage.engine import ZImageEngine
+        from animatory.genimage.zimage.engine import ZImageEngine
 
         if not isinstance(engine, ZImageEngine):
             return
         if os.environ.get("ZIMAGE_RELEASE_AFTER", "1") != "1":
             return
         engine.release()
-        from animatory.zimage import brain
+        from animatory.genimage.zimage import brain
 
         brain.restore_brain(self._brain_state)
         self._brain_state = {}
@@ -101,7 +101,7 @@ class ZImageExecutor(AbstractExecutor):
         """The engine if injected or if torch/diffusers are importable, else None."""
         if self._engine is not None:
             return self._engine
-        from animatory.zimage.engine import ZImageEngine, deps_available
+        from animatory.genimage.zimage.engine import ZImageEngine, deps_available
 
         if deps_available():
             self._engine = ZImageEngine(self.config)
@@ -223,6 +223,6 @@ class ZImageExecutor(AbstractExecutor):
         )
 
     async def health_check(self) -> bool:
-        from animatory.zimage.engine import deps_available
+        from animatory.genimage.zimage.engine import deps_available
 
         return deps_available()

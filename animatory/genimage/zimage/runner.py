@@ -13,8 +13,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from animatory.zimage.rig import Rig
-from animatory.zimage.shots import Shot, index_rigs, primary_rig, resolve_gen
+from animatory.genimage.zimage.rig import Rig
+from animatory.genimage.zimage.shots import Shot, index_rigs, primary_rig, resolve_gen
 
 logger = logging.getLogger(__name__)
 

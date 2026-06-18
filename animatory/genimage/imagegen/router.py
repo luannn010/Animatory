@@ -17,10 +17,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from animatory.imagegen.jobs import ImageJobStore
-from animatory.imagegen.lora import LoraRegistry
-from animatory.imagegen.lora_train import _list_images
-from animatory.imagegen.schemas import (
+from animatory.genimage.imagegen.jobs import ImageJobStore
+from animatory.genimage.imagegen.lora import LoraRegistry
+from animatory.genimage.imagegen.lora_train import _list_images
+from animatory.genimage.imagegen.schemas import (
     AssetItem,
     GenerateResponse,
     GenerationRequest,
@@ -30,8 +30,8 @@ from animatory.imagegen.schemas import (
     TrainRequest,
     TrainResponse,
 )
-from animatory.imagegen.service import run_job, run_train_job
-from animatory.zimage.train import _slug
+from animatory.genimage.imagegen.service import run_job, run_train_job
+from animatory.genimage.zimage.train import _slug
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ async def list_loras(request: Request) -> list[str]:
 
 @router.get("/healthz", response_model=HealthView)
 async def healthz(request: Request) -> HealthView:
-    from animatory.zimage.brain import free_vram_mb
+    from animatory.genimage.zimage.brain import free_vram_mb
 
     engine = getattr(request.app.state, "image_engine", None)
     engine_loaded = bool(getattr(engine, "is_loaded", False))

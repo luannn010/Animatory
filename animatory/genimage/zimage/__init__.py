@@ -19,6 +19,6 @@ Only ``engine``/``train`` require torch/diffusers; everything else is pure Pytho
 contract, extraction, and orchestration are testable without a GPU.
 """
 
-from animatory.zimage.rig import Rig, KINDS, IDENTITY_MODES, KIND_STYLE_DEFAULTS
+from animatory.genimage.zimage.rig import Rig, KINDS, IDENTITY_MODES, KIND_STYLE_DEFAULTS
 
 __all__ = ["Rig", "KINDS", "IDENTITY_MODES", "KIND_STYLE_DEFAULTS"]

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from animatory.imagegen.presets import AssetType
+from animatory.genimage.imagegen.presets import AssetType
 
 
 class LoraConfig(BaseModel):

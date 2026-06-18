@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from animatory.zimage.rig import Rig
+from animatory.genimage.zimage.rig import Rig
 
 logger = logging.getLogger(__name__)
 

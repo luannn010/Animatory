@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from animatory.zimage.rig import KIND_STYLE_DEFAULTS, KINDS, Rig
+from animatory.genimage.zimage.rig import KIND_STYLE_DEFAULTS, KINDS, Rig
 
 RIGS = Path(__file__).resolve().parent / "fixtures" / "rigs"
 SAMPLES = {

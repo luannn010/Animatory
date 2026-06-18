@@ -9,7 +9,7 @@ import pytest
 
 from animatory.executors.zimage import ZImageExecutor
 from animatory.models import AgentDef, LayerEnum, RunRequest, StackEnum
-from animatory.zimage.config import ZImageConfig
+from animatory.genimage.zimage.config import ZImageConfig
 
 
 class _FakeImage:
@@ -70,7 +70,7 @@ async def test_build_rigs_writes_one_rig_json_per_entity(tmp_path):
 async def test_build_rigs_without_engine_writes_json_only(tmp_path, monkeypatch):
     # Deps unavailable (forced, so the test is environment-independent) → rig.json
     # contracts still written, no reference images.
-    import animatory.zimage.engine as zengine
+    import animatory.genimage.zimage.engine as zengine
 
     monkeypatch.setattr(zengine, "deps_available", lambda: False)
     ex = ZImageExecutor(config=_cfg(tmp_path), engine=None)

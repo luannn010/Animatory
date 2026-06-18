@@ -12,7 +12,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 
-from animatory.zimage.config import ZImageConfig
+from animatory.genimage.zimage.config import ZImageConfig
 
 logger = logging.getLogger(__name__)
 

@@ -257,7 +257,7 @@ async def ensure_chat_available(
 
     woke = False
     try:
-        from animatory.zimage import brain  # local import: optional control-plane dependency
+        from animatory.genimage.zimage import brain  # local import: optional control-plane dependency
 
         woke = await asyncio.to_thread(brain.BrainClient().wake)
     except Exception as exc:  # pragma: no cover - control plane is optional
