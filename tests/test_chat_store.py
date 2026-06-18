@@ -2,7 +2,7 @@
 from __future__ import annotations
 import pytest
 import pytest_asyncio
-from animatory.chat_store import InMemoryChatStore
+from animatory.chat.store import InMemoryChatStore
 
 
 @pytest_asyncio.fixture

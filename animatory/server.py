@@ -22,7 +22,7 @@ from animatory.models import (
 )
 from animatory.registry import load_registry, AgentRegistry
 from animatory.run_store import RunStore, InMemoryRunStore
-from animatory.chat_store import ChatStore, InMemoryChatStore
+from animatory.chat.store import ChatStore, InMemoryChatStore
 from animatory.base_agent import BaseAgent
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor

@@ -16,7 +16,7 @@ from animatory.parsing import entity_registry, scene_source
 from animatory.parsing.chunker import chunk_file
 from animatory.models import RunRecord, RunStatusEnum
 from animatory.parsing.scene_parser import ChatUnavailableError, parse_episode, reparse_scene
-from animatory.chat_engine import stream_chat, generate_title
+from animatory.chat.engine import stream_chat, generate_title
 from animatory.enrichment.voice_profiles import aggregate
 from sse_starlette.sse import EventSourceResponse
 
