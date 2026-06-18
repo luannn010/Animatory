@@ -219,3 +219,89 @@ def test_merge_descriptions_force_overwrites():
 def test_merge_descriptions_unknown_name_is_noop():
     reg = er.EntityRegistry(episode_id="ep1")
     assert reg.merge_descriptions("characters", "Nobody", description={"summary": "x"}) is False
+
+
+# ── free-inference visual block ──────────────────────────────────────────────
+
+
+def test_empty_visual_character_shape():
+    v = er.empty_visual("characters")
+    assert set(v) == set(er.CHAR_VISUAL_FIELDS)
+    assert all(v[f] == {"value": "", "source": ""} for f in v)
+
+
+def test_empty_visual_location_shape():
+    v = er.empty_visual("locations")
+    assert set(v) == set(er.LOC_VISUAL_FIELDS)
+    assert all(v[f] == {"value": "", "source": ""} for f in v)
+
+
+def test_merge_visual_fills_empty_only():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "visual": {"attire": {"value": "white dress", "source": "script"},
+                                "hair": {"value": "", "source": ""}},
+                     "generated": True}],
+    )
+    ok = reg.merge_visual(
+        "characters", "từ an",
+        visual={"attire": {"value": "WRONG", "source": "inferred"},
+                "hair": {"value": "long black topknot", "source": "inferred"}},
+    )
+    assert ok is True
+    v = reg.characters[0]["visual"]
+    assert v["attire"] == {"value": "white dress", "source": "script"}   # set → preserved
+    assert v["hair"] == {"value": "long black topknot", "source": "inferred"}  # empty → filled
+
+
+def test_merge_visual_adds_missing_field():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [], "visual": {}, "generated": True}],
+    )
+    reg.merge_visual("characters", "Từ An",
+                     visual={"eyes": {"value": "sharp phoenix eyes", "source": "inferred"}})
+    assert reg.characters[0]["visual"]["eyes"]["value"] == "sharp phoenix eyes"
+
+
+def test_merge_visual_respects_user_edit():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "visual": er.empty_visual("characters"),
+                     "generated": False}],  # human edited this entry
+    )
+    reg.merge_visual("characters", "Từ An",
+                     visual={"hair": {"value": "machine guess", "source": "inferred"}})
+    assert reg.characters[0]["visual"]["hair"]["value"] == ""  # authored entry skipped
+
+
+def test_merge_visual_force_overwrites():
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "visual": {"attire": {"value": "old", "source": "script"}},
+                     "generated": False}],
+    )
+    reg.merge_visual("characters", "Từ An",
+                     visual={"attire": {"value": "new", "source": "inferred"}}, force=True)
+    assert reg.characters[0]["visual"]["attire"] == {"value": "new", "source": "inferred"}
+
+
+def test_merge_visual_unknown_name_is_noop():
+    reg = er.EntityRegistry(episode_id="ep1")
+    assert reg.merge_visual("characters", "Nobody",
+                            visual={"hair": {"value": "x", "source": "inferred"}}) is False
+
+
+def test_visual_block_round_trips(tmp_path):
+    reg = er.EntityRegistry(
+        episode_id="ep1",
+        characters=[{"canonical": "Từ An", "aliases": [],
+                     "visual": {"hair": {"value": "topknot", "source": "inferred"}},
+                     "generated": True}],
+    )
+    er.save(reg, tmp_path, now="2026-06-04T00:00:00Z")
+    reloaded = er.load("ep1", tmp_path)
+    assert reloaded.characters[0]["visual"]["hair"]["value"] == "topknot"

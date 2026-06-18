@@ -26,6 +26,18 @@ LOC_DESC_FIELDS = ("summary", "setting", "lighting")
 VOICE_AUTHORED_FIELDS = ("register", "tone", "pace")
 VOICE_STAT_FIELDS = ("dominant_emotion", "dominant_intensity", "line_count")
 
+# Free-inference visual block (xianxia/donghua design). Separate from the
+# evidence-only ``description`` block: every field carries {value, source} where
+# source is "script" (grounded) or "inferred" (genre synthesis). See
+# animatory/visual_inference.py.
+CHAR_VISUAL_FIELDS = (
+    "face", "eyes", "hair", "attire", "palette", "build", "props", "aura_vfx",
+)
+LOC_VISUAL_FIELDS = (
+    "setting", "architecture", "props", "lighting", "atmosphere", "palette",
+    "time_of_day",
+)
+
 
 def empty_description(kind: str) -> dict:
     """A blank structured description for a character or location."""
@@ -44,6 +56,12 @@ def empty_voice() -> dict:
         "dominant_intensity": "",
         "line_count": 0,
     }
+
+
+def empty_visual(kind: str) -> dict:
+    """A blank visual block. Each field is {value:"", source:""}."""
+    fields = CHAR_VISUAL_FIELDS if kind == "characters" else LOC_VISUAL_FIELDS
+    return {f: {"value": "", "source": ""} for f in fields}
 
 
 def _is_empty(v: object) -> bool:
@@ -235,6 +253,35 @@ class EntityRegistry:
                 elif machine and (force or _is_empty(vb.get(fld))):
                     vb[fld] = val
 
+        entry.setdefault("generated", True)
+        return True
+
+    def merge_visual(
+        self,
+        kind: str,
+        name: str,
+        *,
+        visual: dict | None = None,
+        force: bool = False,
+    ) -> bool:
+        """Merge a free-inference visual block onto a known entry. Returns True if
+        matched.
+
+        Same fill-empty + ``generated`` discipline as :meth:`merge_descriptions`:
+        a field is written only when the entry is machine-owned (``generated`` is
+        truthy, or ``force``) and its current inner ``value`` is empty (or
+        ``force``). Each incoming field is the ``{value, source}`` pair to store,
+        so re-running inference never clobbers hand-edited visuals.
+        """
+        entry = self._find(kind, name)
+        if entry is None:
+            return False
+        machine = bool(entry.get("generated", True)) or force
+        vb = entry.setdefault("visual", empty_visual(kind))
+        if visual and machine:
+            for fld, val in visual.items():
+                if force or _is_empty(vb.get(fld, {}).get("value")):
+                    vb[fld] = val
         entry.setdefault("generated", True)
         return True
 
