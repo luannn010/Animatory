@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 
-from animatory import entity_registry as er
+from animatory.parsing import entity_registry as er
 from animatory.voice_profiles import aggregate
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from animatory.scene_parser import _resolve_beats, _assemble_scene
+from animatory.parsing.scene_parser import _resolve_beats, _assemble_scene
 
 
 def _reconstruct(scene_text: str, beats: list[dict]) -> str:

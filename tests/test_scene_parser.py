@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
-from animatory.scene_parser import parse_chunk, parse_episode, _slice_by_anchors
+from animatory.parsing.scene_parser import parse_chunk, parse_episode, _slice_by_anchors
 
 # Beats-locator contract: the model emits anchors (locators) only; code lifts
 # every actual string from the source text below.
@@ -125,7 +125,7 @@ async def test_parse_episode_processes_all_chunks(tmp_path):
     }
     (ep_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    with patch("animatory.scene_parser.parse_chunk", new_callable=AsyncMock) as mock_pc:
+    with patch("animatory.parsing.scene_parser.parse_chunk", new_callable=AsyncMock) as mock_pc:
         mock_pc.return_value = ep_dir / "C001_scenes.json"
         await parse_episode("ep1", ep_dir)
 
@@ -160,7 +160,7 @@ async def test_parse_episode_runs_enrichment_after_chunks(tmp_path, monkeypatch)
     async def fake_describe(scenes, *, call_fn, qwen):
         return {s["scene_id"]: "He stands." for s in scenes}
 
-    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
+    with patch("animatory.parsing.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
          patch("animatory.entity_enrichment.enrich_entities", side_effect=fake_enrich), \
          patch("animatory.entity_enrichment.describe_scenes", side_effect=fake_describe):
         await parse_episode("ep1", ep_dir)
@@ -186,8 +186,8 @@ async def test_parse_episode_enrichment_can_be_disabled(tmp_path, monkeypatch):
     async def fake_parse_chunk(*, chunk_id, chunk_text, episode_id, output_dir, **kw):
         return output_dir / f"{chunk_id}_scenes.json"
 
-    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
-         patch("animatory.scene_parser._enrich_episode", new_callable=AsyncMock) as mock_enrich:
+    with patch("animatory.parsing.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
+         patch("animatory.parsing.scene_parser._enrich_episode", new_callable=AsyncMock) as mock_enrich:
         await parse_episode("ep1", ep_dir)
     mock_enrich.assert_not_called()
 
@@ -209,13 +209,13 @@ async def test_parse_episode_prefers_edited_text(tmp_path):
         seen["text"] = chunk_text
         return output_dir / f"{chunk_id}_scenes.json"
 
-    with patch("animatory.scene_parser.parse_chunk", side_effect=fake_parse_chunk):
+    with patch("animatory.parsing.scene_parser.parse_chunk", side_effect=fake_parse_chunk):
         await parse_episode("ep1", ep_dir)
 
     assert seen["text"] == "cleaned text."
 
 
-from animatory import entity_registry as er
+from animatory.parsing import entity_registry as er
 
 ENRICHED_CHUNK_TEXT = 'Đêm xuống. đại cản bước vào "Quỳ."'
 ENRICHED_RESPONSE = {
@@ -300,7 +300,7 @@ async def test_parse_chunk_prompt_includes_emotions_and_known_names(tmp_path):
 
 @pytest.mark.asyncio
 async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
-    from animatory.scene_parser import reparse_scene
+    from animatory.parsing.scene_parser import reparse_scene
     reg = er.EntityRegistry(
         episode_id="ep1",
         characters=[{"canonical": "Đại Càn", "aliases": ["đại cản"]}],
@@ -338,7 +338,7 @@ async def test_reparse_scene_normalizes_and_forces_id(tmp_path):
 
 @pytest.mark.asyncio
 async def test_reparse_scene_handles_scenes_wrapper():
-    from animatory.scene_parser import reparse_scene
+    from animatory.parsing.scene_parser import reparse_scene
     reg = er.EntityRegistry(episode_id="ep1")
     wrapped = {"scenes": [{
         "scene_id": "x", "location": "L", "shot_type": "wide", "mood": "m",
@@ -361,7 +361,7 @@ async def test_reparse_scene_handles_scenes_wrapper():
 
 @pytest.mark.asyncio
 async def test_reparse_scene_prompt_has_anchor_and_known_names():
-    from animatory.scene_parser import reparse_scene
+    from animatory.parsing.scene_parser import reparse_scene
     reg = er.EntityRegistry(episode_id="ep1", characters=[{"canonical": "Tư An", "aliases": []}])
     captured = {}
 
@@ -439,7 +439,7 @@ async def test_two_phase_parse(tmp_path, monkeypatch):
         return _beats_scene("Bravo tiep theo", "canh hai.")
 
     text = "Alpha mo dau canh mot. Bravo tiep theo canh hai."
-    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
+    with patch("animatory.parsing.scene_parser._call_qwen", side_effect=fake_call):
         out = await parse_chunk("C001", text, "ep", tmp_path)
 
     data = json.loads(out.read_text(encoding="utf-8"))
@@ -460,7 +460,7 @@ async def test_two_phase_falls_back_to_single_pass(tmp_path, monkeypatch):
             return {"segments": []}            # segmentation yields nothing
         return {"scenes": [{"scene_id": "C001_S01", **_beats_scene("Mot canh", "o day.")}]}
 
-    with patch("animatory.scene_parser._call_qwen", side_effect=fake_call):
+    with patch("animatory.parsing.scene_parser._call_qwen", side_effect=fake_call):
         out = await parse_chunk("C001", "Mot canh don gian o day.", "ep", tmp_path)
 
     data = json.loads(out.read_text(encoding="utf-8"))

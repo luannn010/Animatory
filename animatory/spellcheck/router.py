@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from animatory import entity_registry
+from animatory.parsing import entity_registry
 from animatory.spellcheck.chunker import segment_document
 from animatory.spellcheck.checker import check_segment
 from animatory.spellcheck.naming_pass import combined_naming_findings

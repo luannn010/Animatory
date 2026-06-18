@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from animatory import entity_registry
+from animatory.parsing import entity_registry
 from animatory.voice_profiles import aggregate
 # Shared Qwen client now lives in animatory.llm.qwen. Re-exported here so existing
 # callers/tests that reference animatory.scene_parser._call_qwen still resolve.

@@ -15,7 +15,7 @@ from animatory.models import RunRequest
 from animatory.executors.fake import FakeExecutor
 from animatory.executors.comfyui import ComfyUIExecutor
 from animatory.executors.llamacpp import LlamaCppExecutor
-from animatory.chunker import chunk_file
+from animatory.parsing.chunker import chunk_file
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ def cmd_chunk(args: argparse.Namespace) -> None:
 
     if args.parse:
         import asyncio as _asyncio
-        from animatory.scene_parser import parse_episode
+        from animatory.parsing.scene_parser import parse_episode
         _asyncio.run(parse_episode(
             source.stem,
             manifest_path.parent,

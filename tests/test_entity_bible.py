@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from animatory.entity_registry import EntityRegistry
+from animatory.parsing.entity_registry import EntityRegistry
 from animatory.item_extractor import extract_recurring_items
 
 SHOTS = [

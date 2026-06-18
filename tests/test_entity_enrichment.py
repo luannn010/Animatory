@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from animatory import entity_enrichment as ee
-from animatory import entity_registry as er
+from animatory.parsing import entity_registry as er
 
 
 def _scenes():

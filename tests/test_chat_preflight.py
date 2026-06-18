@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from animatory import scene_parser as sp
-from animatory.scene_parser import ChatUnavailableError, ensure_chat_available
+from animatory.parsing import scene_parser as sp
+from animatory.parsing.scene_parser import ChatUnavailableError, ensure_chat_available
 
 
 @pytest.fixture(autouse=True)

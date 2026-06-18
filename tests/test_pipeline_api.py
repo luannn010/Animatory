@@ -746,7 +746,7 @@ async def test_reparse_route_503_when_chat_down(client, tmp_path, monkeypatch):
     async def _down(endpoint, timeout_s):
         return False
 
-    monkeypatch.setattr("animatory.scene_parser._chat_reachable", _down)
+    monkeypatch.setattr("animatory.parsing.scene_parser._chat_reachable", _down)
     monkeypatch.setattr("animatory.zimage.brain.BrainClient.wake", lambda self, model=None: False)
 
     r = await client.post(f"/pipeline/episodes/{ep}/chunks/{cid}/scenes/{sid}/reparse")

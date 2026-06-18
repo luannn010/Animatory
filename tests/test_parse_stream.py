@@ -7,8 +7,8 @@ import json
 import pytest
 
 from animatory import entity_enrichment as ee
-from animatory import entity_registry as er
-from animatory.scene_parser import parse_episode
+from animatory.parsing import entity_registry as er
+from animatory.parsing.scene_parser import parse_episode
 
 
 def _scene(cid: str) -> dict:
@@ -62,7 +62,7 @@ async def test_parse_episode_emits_streaming_events(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ee, "enrich_entities", fake_enrich)
     monkeypatch.setattr(ee, "describe_scenes", fake_describe)
-    monkeypatch.setattr("animatory.scene_parser.parse_chunk", fake_parse_chunk)
+    monkeypatch.setattr("animatory.parsing.scene_parser.parse_chunk", fake_parse_chunk)
 
     await parse_episode("ep1", ep_dir, on_event=on_event)
 

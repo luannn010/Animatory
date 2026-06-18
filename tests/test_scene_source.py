@@ -1,6 +1,6 @@
 # tests/test_scene_source.py
 from __future__ import annotations
-from animatory.scene_source import locate, MIN_NEEDLE_CHARS
+from animatory.parsing.scene_source import locate, MIN_NEEDLE_CHARS
 
 CHAPTER = "\n".join([
     "Tu An chạy trốn khỏi phủ công chúa.",          # 0

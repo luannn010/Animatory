@@ -1,7 +1,7 @@
 # tests/test_chunker.py
 from __future__ import annotations
 import pytest
-from animatory.chunker import chunk_text, chunk_file, ChunkRecord
+from animatory.parsing.chunker import chunk_text, chunk_file, ChunkRecord
 from pathlib import Path
 import json, tempfile, os
 

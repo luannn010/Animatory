@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from animatory.entity_registry import _key
+from animatory.parsing.entity_registry import _key
 from animatory.zimage.rig import Rig
 
 
