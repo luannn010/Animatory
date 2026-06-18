@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 
 from animatory.parsing import entity_registry
-from animatory.voice_profiles import aggregate
+from animatory.enrichment.voice_profiles import aggregate
 # Shared Qwen client now lives in animatory.llm.qwen. Re-exported here so existing
 # callers/tests that reference animatory.scene_parser._call_qwen still resolve.
 from animatory.llm.qwen import _call_qwen, _qwen_env
@@ -765,7 +765,7 @@ async def _enrich_episode(
     whole episode so a description sees all of an entity's appearances. Best-effort
     and additive: failures degrade per entity and never fail the parse run. Gated
     by ``QWEN_ENRICH_ENTITIES`` (default on)."""
-    from animatory import entity_enrichment  # lazy — avoids an import cycle
+    from animatory.enrichment import entity_enrichment  # lazy — avoids an import cycle
 
     endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(qwen_endpoint)
     qwen = dict(

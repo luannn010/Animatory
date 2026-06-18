@@ -161,8 +161,8 @@ async def test_parse_episode_runs_enrichment_after_chunks(tmp_path, monkeypatch)
         return {s["scene_id"]: "He stands." for s in scenes}
 
     with patch("animatory.parsing.scene_parser.parse_chunk", side_effect=fake_parse_chunk), \
-         patch("animatory.entity_enrichment.enrich_entities", side_effect=fake_enrich), \
-         patch("animatory.entity_enrichment.describe_scenes", side_effect=fake_describe):
+         patch("animatory.enrichment.entity_enrichment.enrich_entities", side_effect=fake_enrich), \
+         patch("animatory.enrichment.entity_enrichment.describe_scenes", side_effect=fake_describe):
         await parse_episode("ep1", ep_dir)
 
     reg = er.load("ep1", ep_dir)

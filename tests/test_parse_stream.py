@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from animatory import entity_enrichment as ee
+from animatory.enrichment import entity_enrichment as ee
 from animatory.parsing import entity_registry as er
 from animatory.parsing.scene_parser import parse_episode
 
