@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from animatory.parsing.entity_registry import _key
+from animatory.enrichment.prompts import compose_image_prompt
 from animatory.genimage.zimage.rig import Rig
 
 
@@ -77,37 +78,46 @@ def validate_shot(shot: Shot, rig_index: dict[str, Rig]) -> list[str]:
 
 
 def compose_shot_prompt(shot: Shot, rig_index: dict[str, Rig]) -> str:
-    """``<identity>, <action>, background: <location>, with <item>..., <style_tokens>``."""
-    parts: list[str] = []
+    """``<identity>, <action>, background: <location>, with <item>..., <style_tokens>``.
 
+    Delegates assembly to ``enrichment.prompts.compose_image_prompt`` (the single
+    prompt-composition home) and injects each entity's enriched ``description``
+    (rig.description, from entity_enrichment) so the prompt *describes* the
+    subject/setting, not just names them. With no descriptions the output is
+    identical to before."""
     char_rig = primary_rig(shot, rig_index)
     if char_rig is not None:
-        parts.append(char_rig.trigger if (char_rig.uses_lora and char_rig.trigger) else char_rig.name)
-    elif shot.characters:
-        parts.append(shot.characters[0])
+        subject = char_rig.trigger if (char_rig.uses_lora and char_rig.trigger) else char_rig.name
+        if char_rig.description:
+            subject = f"{subject}, {char_rig.description}"
+    else:
+        subject = shot.characters[0] if shot.characters else ""
 
     if shot.action.strip():
-        parts.append(shot.action.strip())
+        action = shot.action.strip()
     elif shot.dialogue.strip():
         subj = shot.characters[0] if shot.characters else "the character"
-        parts.append(f"{subj} speaking")
+        action = f"{subj} speaking"
+    else:
+        action = ""
 
     loc_rig = location_rig(shot, rig_index)
     if loc_rig is not None:
-        parts.append(f"background: {loc_rig.name}")
-    elif shot.location:
-        parts.append(f"background: {shot.location}")
-
-    for it in shot.items:
-        parts.append(f"with {it}")
+        setting = loc_rig.name
+        if loc_rig.description:
+            setting = f"{setting}, {loc_rig.description}"
+    else:
+        setting = shot.location or ""
 
     style_src = char_rig or loc_rig
     style = (style_src.style_defaults.get("style_tokens")
              if style_src is not None else "flat color 2D toon, clean lineart")
-    if style:
-        parts.append(style)
 
-    return ", ".join(p for p in parts if p)
+    positive, _ = compose_image_prompt(
+        subject_desc=subject, action=action, setting_desc=setting,
+        items=list(shot.items), style_tokens=style or "", negative_base="",
+    )
+    return positive
 
 
 def resolve_gen(shot: Shot, rig_index: dict[str, Rig]):

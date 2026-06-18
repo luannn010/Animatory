@@ -65,6 +65,7 @@ class Rig:
     trained: bool = False
     train_notes: str = ""
     appears_in: list[str] = field(default_factory=list)
+    description: str = ""   # enriched appearance/attire text (from entity_enrichment)
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -165,6 +166,7 @@ class Rig:
             "trained": self.trained,
             "train_notes": self.train_notes,
             "appears_in": list(self.appears_in),
+            "description": self.description,
         }
 
     def save(self, path: str | Path) -> Path:
