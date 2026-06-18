@@ -7,8 +7,8 @@ import re
 
 import httpx
 
-from animatory.executors.base import AbstractExecutor
-from animatory.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest
+from animatory.runtime.executors.base import AbstractExecutor
+from animatory.runtime.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest
 
 logger = logging.getLogger(__name__)
 

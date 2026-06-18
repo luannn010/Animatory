@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import HTTPException
 
-from animatory.models import (
+from animatory.runtime.models import (
     AgentDef,
     BackoffEnum,
     ExecutorResult,
@@ -16,8 +16,8 @@ from animatory.models import (
     RunRequest,
     RunStatusEnum,
 )
-from animatory.run_store import RunStore
-from animatory.executors.base import AbstractExecutor
+from animatory.runtime.run_store import RunStore
+from animatory.runtime.executors.base import AbstractExecutor
 
 logger = logging.getLogger(__name__)
 

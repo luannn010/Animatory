@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from animatory.models import AgentDef, StackEnum
-from animatory.registry import load_registry, AgentRegistry
+from animatory.runtime.models import AgentDef, StackEnum
+from animatory.runtime.registry import load_registry, AgentRegistry
 
 YAML_PATH = Path(__file__).parent.parent / "agent-framework.yaml"
 

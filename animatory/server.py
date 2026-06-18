@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
-from animatory.models import (
+from animatory.runtime.models import (
     AgentListItem,
     MetricsSnapshot,
     RunRecord,
@@ -20,14 +20,14 @@ from animatory.models import (
     RunResponse,
     RunStatusEnum,
 )
-from animatory.registry import load_registry, AgentRegistry
-from animatory.run_store import RunStore, InMemoryRunStore
+from animatory.runtime.registry import load_registry, AgentRegistry
+from animatory.runtime.run_store import RunStore, InMemoryRunStore
 from animatory.chat.store import ChatStore, InMemoryChatStore
-from animatory.base_agent import BaseAgent
-from animatory.executors.fake import FakeExecutor
-from animatory.executors.comfyui import ComfyUIExecutor
-from animatory.executors.llamacpp import LlamaCppExecutor
-from animatory.executors.zimage import ZImageExecutor
+from animatory.runtime.base_agent import BaseAgent
+from animatory.runtime.executors.fake import FakeExecutor
+from animatory.runtime.executors.comfyui import ComfyUIExecutor
+from animatory.runtime.executors.llamacpp import LlamaCppExecutor
+from animatory.runtime.executors.zimage import ZImageExecutor
 from animatory.studio.router import router as studio_router
 from animatory.studio.store import StudioStore
 

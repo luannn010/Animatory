@@ -5,7 +5,7 @@ from typing import Any
 
 import aiosqlite
 
-from animatory.models import RunRecord, RunStatusEnum, OutputArtifact
+from animatory.runtime.models import RunRecord, RunStatusEnum, OutputArtifact
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS runs (

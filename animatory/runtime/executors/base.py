@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from animatory.models import RunRequest, AgentDef, ExecutorResult
+from animatory.runtime.models import RunRequest, AgentDef, ExecutorResult
 
 
 class AbstractExecutor(ABC):

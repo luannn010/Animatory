@@ -6,7 +6,7 @@ import pathlib
 
 import yaml
 
-from animatory.models import AgentDef, AgentInput, AgentOutput, RetryConfig, LayerEnum
+from animatory.runtime.models import AgentDef, AgentInput, AgentOutput, RetryConfig, LayerEnum
 
 logger = logging.getLogger(__name__)
 

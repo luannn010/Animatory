@@ -23,8 +23,8 @@ import logging
 import os
 from pathlib import Path
 
-from animatory.executors.base import AbstractExecutor
-from animatory.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest
+from animatory.runtime.executors.base import AbstractExecutor
+from animatory.runtime.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest
 from animatory.genimage.zimage.config import ZImageConfig
 from animatory.genimage.zimage.rig import Rig
 from animatory.genimage.zimage.runner import run_batch

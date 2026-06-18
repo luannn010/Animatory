@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from animatory.executors.base import AbstractExecutor
-from animatory.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest, StackEnum
+from animatory.runtime.executors.base import AbstractExecutor
+from animatory.runtime.models import AgentDef, ExecutorResult, OutputArtifact, RunRequest, StackEnum
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from animatory.executors.zimage import ZImageExecutor
-from animatory.models import AgentDef, LayerEnum, RunRequest, StackEnum
+from animatory.runtime.executors.zimage import ZImageExecutor
+from animatory.runtime.models import AgentDef, LayerEnum, RunRequest, StackEnum
 from animatory.genimage.zimage.config import ZImageConfig
 
 
