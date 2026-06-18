@@ -1,5 +1,6 @@
 {
   "shape": "package",
+  "projectId": "3dfe21ad-3639-461f-8b83-3cc38ddf79e5",
   "pkg": "@animatory/ui",
   "globalName": "AnimatoryUI",
   "buildCmd": "node .design-sync/build/run.mjs",
