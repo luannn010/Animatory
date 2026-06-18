@@ -1,0 +1,51 @@
+{
+  "shape": "package",
+  "pkg": "@animatory/ui",
+  "globalName": "AnimatoryUI",
+  "buildCmd": "node .design-sync/build/run.mjs",
+  "entry": "./frontend/.design-sync-build/dist/index.mjs",
+  "srcDir": "src/studio/ui",
+  "componentSrcMap": {
+    "Button": "src/studio/ui/primitives.tsx",
+    "IconButton": "src/studio/ui/primitives.tsx",
+    "Pill": "src/studio/ui/primitives.tsx",
+    "Chip": "src/studio/ui/primitives.tsx",
+    "StageBadge": "src/studio/ui/primitives.tsx",
+    "ReadinessDot": "src/studio/ui/primitives.tsx",
+    "ProgressBar": "src/studio/ui/primitives.tsx",
+    "Card": "src/studio/ui/primitives.tsx",
+    "Input": "src/studio/ui/primitives.tsx",
+    "Textarea": "src/studio/ui/primitives.tsx",
+    "Icon": "src/studio/ui/Icon.tsx",
+    "PlateThumb": "src/studio/ui/PlateThumb.tsx",
+    "TrackHeaderStrip": "src/studio/ui/shell.tsx",
+    "SectionLabel": "src/studio/ui/shell.tsx",
+    "BackLink": "src/studio/ui/shell.tsx"
+  },
+  "docsMap": {
+    "Button": "../.design-sync/groups/controls.md",
+    "IconButton": "../.design-sync/groups/controls.md",
+    "Chip": "../.design-sync/groups/controls.md",
+    "Input": "../.design-sync/groups/controls.md",
+    "Textarea": "../.design-sync/groups/controls.md",
+    "Pill": "../.design-sync/groups/feedback.md",
+    "StageBadge": "../.design-sync/groups/feedback.md",
+    "ReadinessDot": "../.design-sync/groups/feedback.md",
+    "ProgressBar": "../.design-sync/groups/feedback.md",
+    "Card": "../.design-sync/groups/layout.md",
+    "TrackHeaderStrip": "../.design-sync/groups/layout.md",
+    "SectionLabel": "../.design-sync/groups/layout.md",
+    "BackLink": "../.design-sync/groups/layout.md",
+    "Icon": "../.design-sync/groups/media.md",
+    "PlateThumb": "../.design-sync/groups/media.md"
+  },
+  "overrides": {
+    "TrackHeaderStrip": { "cardMode": "column" },
+    "SectionLabel": { "cardMode": "column" },
+    "Textarea": { "cardMode": "column" }
+  },
+  "cssEntry": ".design-sync-build/styles.css",
+  "extraFonts": [".design-sync-build/inter.css"],
+  "runtimeFontPrefixes": ["Geist Mono"],
+  "readmeHeader": ".design-sync/conventions.md"
+}
