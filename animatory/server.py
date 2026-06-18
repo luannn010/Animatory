@@ -134,6 +134,8 @@ from animatory.spellcheck.router import router as spellcheck_router
 app.include_router(spellcheck_router)
 from animatory.genimage.imagegen.router import router as imagegen_router
 app.include_router(imagegen_router)
+from animatory.genvoice.router import router as genvoice_router
+app.include_router(genvoice_router)
 
 # Serve generated images so JobView.image_url resolves over HTTP (Z-Image artifacts
 # otherwise live only on disk). The directory is created so StaticFiles can mount it.
