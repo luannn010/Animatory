@@ -76,3 +76,29 @@ async def test_character_prompts_404_when_not_chunked(client, tmp_path, monkeypa
     monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
     r = await client.get("/pipeline/episodes/NOPE/character-prompts")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_infer_visuals_run_fails_when_inference_raises(client, tmp_path, monkeypatch):
+    # If inference blows up, the run must transition to 'failed' with an error set —
+    # never left stuck in 'running'.
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    _seed_episode(tmp_path)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("inference blew up")
+
+    monkeypatch.setattr(vi, "infer_visuals", boom)
+
+    r = await client.post("/pipeline/episodes/C001/infer-visuals")
+    assert r.status_code == 200
+    run_id = r.json()["run_id"]
+
+    rec = None
+    for _ in range(100):
+        rec = (await client.get(f"/runs/{run_id}")).json()
+        if rec["status"] in ("done", "failed"):
+            break
+        await asyncio.sleep(0.02)
+    assert rec is not None and rec["status"] == "failed"
+    assert rec.get("error")  # error populated, not stuck in 'running'

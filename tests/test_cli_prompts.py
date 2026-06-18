@@ -5,6 +5,8 @@ import argparse
 import json
 import sys
 
+import pytest
+
 from animatory import cli
 from animatory import entity_registry as er
 from animatory import visual_inference as vi
@@ -85,3 +87,13 @@ def test_main_routes_prompts_subcommand(tmp_path, monkeypatch):
     cli.main()  # default flags: --infer off, --force off
     assert (ep / "character_prompts.json").exists()
     assert (ep / "location_prompts.json").exists()
+
+
+def test_cmd_prompts_errors_when_episode_dir_missing(tmp_path, capsys):
+    missing = tmp_path / "does-not-exist"
+    args = argparse.Namespace(episode_dir=str(missing), infer=False, force=False,
+                              qwen_endpoint="http://localhost:1090")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_prompts(args)
+    assert exc.value.code == 1
+    assert "Error: episode dir not found" in capsys.readouterr().err
