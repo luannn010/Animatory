@@ -4,7 +4,7 @@ import { studioApi } from '../../api'
 import type { Bone, RigDoc, RigMode } from '../../types'
 import { rigReducer, initRigState, emptyRig, toRigDoc, previewPose } from '../../rig/rigReducer'
 import { resolveBone } from '../../rig/fk'
-import { RigStage } from '../../rig/RigStage'
+import { RigStage, type DrawnBone } from '../../rig/RigStage'
 import { Button, Icon, BackLink } from '../../ui'
 
 const DEG = 180 / Math.PI
@@ -38,6 +38,7 @@ export function RigEditorView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [drawing, setDrawing] = useState(false)   // drag-to-draw tool (rig mode)
   const fileRef = useRef<HTMLInputElement>(null)
   const accRef = useRef(0)
 
@@ -82,6 +83,13 @@ export function RigEditorView() {
     dispatch({ type: 'addBone', bone: { id: idNew, name: `bone_${idNew}`, parent: parentId, x: tip.tipX, y: tip.tipY, len: 60, angle: parent.angle, mesh: null } })
   }
 
+  // a bone dragged out on the stage — assign id/name, store the drawn geometry
+  function drawBone(g: DrawnBone) {
+    const idNew = nextBoneId(state.bones)
+    const name = g.parent ? `bone_${idNew}` : state.bones.length === 0 ? 'root' : `root_${idNew}`
+    dispatch({ type: 'addBone', bone: { id: idNew, name, parent: g.parent, x: g.x, y: g.y, len: g.len, angle: g.angle, mesh: null } })
+  }
+
   function exportJson() {
     const blob = new Blob([JSON.stringify(toRigDoc(state), null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -124,7 +132,7 @@ export function RigEditorView() {
           {MODES.map(m => {
             const active = state.mode === m.id
             return (
-              <button key={m.id} role="tab" aria-selected={active} onClick={() => dispatch({ type: 'setMode', mode: m.id })}
+              <button key={m.id} role="tab" aria-selected={active} onClick={() => { dispatch({ type: 'setMode', mode: m.id }); if (m.id !== 'rig') setDrawing(false) }}
                 title={m.v2 ? 'Mesh deformation — v2 (no-op in v1)' : undefined}
                 className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors ${ring} ${
                   active ? 'bg-[#3772cf] text-white' : m.v2 ? 'text-muted hover:bg-surface' : 'text-steel hover:bg-surface'
@@ -137,6 +145,12 @@ export function RigEditorView() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {state.mode === 'rig' && (
+            <Button size="sm" variant={drawing ? 'primary' : 'secondary'} icon="plus"
+              onClick={() => setDrawing(d => !d)}>
+              {drawing ? 'Drawing…' : 'Draw bone'}
+            </Button>
+          )}
           <input ref={fileRef} type="file" accept="application/json" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) importJson(f); e.currentTarget.value = '' }} />
           <Button size="sm" variant="ghost" icon="upload" onClick={() => fileRef.current?.click()}>Import</Button>
@@ -185,9 +199,12 @@ export function RigEditorView() {
           )}
         </aside>
 
-        {/* stage (Konva drops into RigStage; this preview reflects the same state) */}
+        {/* interactive stage — drag to draw bones (rig) or pose tip handles (pose) */}
         <RigStage bones={state.bones} pose={previewPose(state)}
-          selectedBoneId={state.selectedBoneId} onSelectBone={id => dispatch({ type: 'selectBone', id })} mode={state.mode} />
+          selectedBoneId={state.selectedBoneId} onSelectBone={id => dispatch({ type: 'selectBone', id })}
+          mode={state.mode} live={state.playing} drawing={drawing}
+          onPoseBone={(boneId, delta) => dispatch({ type: 'setPoseDelta', id: boneId, delta })}
+          onDrawBone={drawBone} />
 
         {/* inspector */}
         <aside>
