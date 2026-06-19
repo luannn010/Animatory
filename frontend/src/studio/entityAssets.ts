@@ -7,6 +7,7 @@ import type {
 import { getEntities, listEpisodes } from '../api/pipeline'
 import type { DesignAsset, DesignKind } from './types'
 import { studioApi } from './api'
+import { deformApi } from './deformApi'
 
 /** URL-safe id from a canonical name (diacritics stripped, non-alnum → '-'). */
 export function slug(name: string): string {
@@ -80,17 +81,51 @@ async function resolveEpisodeId(projectId: string): Promise<string | null> {
  */
 export async function loadDesignAssets(projectId: string): Promise<DesignAsset[]> {
   const episodeId = await resolveEpisodeId(projectId)
+  let base: DesignAsset[] | null = null
   if (episodeId) {
     try {
       const registry = await getEntities(episodeId)
       const real = mapEntities(registry, projectId)
       if (real.length > 0) {
         const mockProps = (await studioApi.getDesignAssets(projectId)).filter(a => a.kind === 'prop')
-        return [...real, ...mockProps]
+        base = [...real, ...mockProps]
       }
     } catch {
       /* fall through to mock */
     }
   }
-  return studioApi.getDesignAssets(projectId)
+  if (base === null) base = await studioApi.getDesignAssets(projectId)
+  return mergeGeneratedCharacters(base, projectId)
+}
+
+/**
+ * Fold Z-Image rig renders (imagegen rig assets) into the design assets as
+ * characters with real `refImageUrl` art. A generated character that matches an
+ * existing entry (by slug) fills in that entry's art; otherwise it is appended.
+ * Network failure is non-fatal — the base list is returned unchanged.
+ */
+async function mergeGeneratedCharacters(base: DesignAsset[], projectId: string): Promise<DesignAsset[]> {
+  let rigs
+  try { rigs = await deformApi.listRigAssets() } catch { return base }
+  if (!rigs.length) return base
+  const out = [...base]
+  for (const r of rigs) {
+    if (!r.imageUrl) continue
+    const name = r.characterId || 'character'
+    const id = slug(name)
+    const url = deformApi.imageSrc(r.imageUrl)
+    const idx = out.findIndex(a => a.kind === 'character' && (a.id === id || slug(a.sourceEntity) === id))
+    if (idx >= 0) {
+      if (!out[idx].refImageUrl) {
+        out[idx] = { ...out[idx], refImageUrl: url, stage: out[idx].stage === 'rough' ? 'color' : out[idx].stage }
+      }
+    } else {
+      out.push({
+        id, projectId, kind: 'character', sourceEntity: name, displayName: name,
+        promptText: '', refImageUrl: url, stage: 'color', candidates: [], lockedRef: null,
+        summary: 'Generated with Z-Image',
+      })
+    }
+  }
+  return out
 }

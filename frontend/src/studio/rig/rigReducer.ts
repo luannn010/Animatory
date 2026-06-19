@@ -82,6 +82,7 @@ export type RigAction =
   | { type: 'updateLayer'; id: string; patch: Partial<ArtLayer> }
   | { type: 'removeLayer'; id: string }
   | { type: 'markClean' }
+  | { type: 'markDirty' }
 
 export function rigReducer(s: RigState, a: RigAction): RigState {
   switch (a.type) {
@@ -89,6 +90,8 @@ export function rigReducer(s: RigState, a: RigAction): RigState {
       return initRigState(a.doc, a.layers ?? [])
     case 'markClean':
       return { ...s, dirty: false }
+    case 'markDirty':
+      return s.dirty ? s : { ...s, dirty: true }
 
     // ── selection / mode / playhead (non-dirtying) ──
     case 'setMode':

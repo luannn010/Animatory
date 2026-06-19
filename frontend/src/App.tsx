@@ -22,6 +22,7 @@ import { CheckingGateView } from './studio/views/pre/CheckingGateView'
 import { RigEditorView } from './studio/views/pre/RigEditorView'
 import { ProductionView } from './studio/views/ProductionView'
 import { PostView } from './studio/views/PostView'
+import { DeformStudioView } from './studio/views/DeformStudioView'
 
 export default function App() {
   return (
@@ -53,6 +54,8 @@ export default function App() {
         {/* Legacy redirect: /vendor → /production */}
         <Route path="/project/:id/vendor" element={<Navigate to="../production" relative="path" replace />} />
         <Route path="/project/:id/post" element={<PostView />} />
+        {/* Mesh deform (Deform v2) — minimal browser surface over the deform backend */}
+        <Route path="/deform" element={<DeformStudioView />} />
         {/* Surface C — agents / runs / metrics (untouched) */}
         <Route path="/agents" element={<AgentsView />} />
         <Route path="/runs" element={<RunsHistory />} />

@@ -23,9 +23,23 @@ interface Props {
   empty?: boolean
   label?: string
   className?: string
+  src?: string            // real generated art — shown instead of the placeholder plate
+  alt?: string
 }
 
-export function PlateThumb({ id, kind = 'character', ratio = '1 / 1', locked, empty, label, className = '' }: Props) {
+export function PlateThumb({ id, kind = 'character', ratio = '1 / 1', locked, empty, label, className = '', src, alt }: Props) {
+  if (src && !empty) {
+    return (
+      <div className={`relative overflow-hidden rounded-[inherit] bg-surface ${className}`} style={{ aspectRatio: ratio }}>
+        <img src={src} alt={alt ?? ''} className="h-full w-full object-cover" />
+        {locked && (
+          <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+            <Icon name="lock" size={11} /> Locked
+          </span>
+        )}
+      </div>
+    )
+  }
   if (empty) {
     return (
       <div

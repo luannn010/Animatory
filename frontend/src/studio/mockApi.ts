@@ -1,9 +1,10 @@
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase, GateStatus,
   TrackId, TrackProgress, DesignAsset, GenCandidate, StoryboardPanel, VoiceCast, VoiceOption,
-  DialogueClip, Animatic, Bone, RigDoc,
+  DialogueClip, Animatic, RigDoc,
 } from './types'
 import { PHASE_ORDER, PRE_TRACKS } from './phases'
+import { buildHumanoid } from './rig/humanoid'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,19 +184,13 @@ function seedAnimatic(projectId: string): Animatic {
   }
 }
 
-// A small demo skeleton so the rig editor isn't empty before art import: a spine
-// up from the canvas, a neck, and one arm. Children's x/y are ignored (their
-// pivot is the parent's tip); only the root's position is meaningful.
+// A fresh character rig opens on the default humanoid skeleton (+ skin
+// silhouette), matching the design's initial state. "Clear bones" empties it and
+// "Import character" reloads it.
 function seedRig(assetId: string): RigDoc {
-  const b = (id: string, name: string, parent: string | null, x: number, y: number, len: number, angle: number): Bone =>
-    ({ id, name, parent, x, y, len, angle, mesh: null })
   return {
     schema: 'animatory.rig/v1', assetId,
-    skeleton: [
-      b('b1', 'spine', null, 260, 320, 90, -Math.PI / 2),
-      b('b2', 'neck', 'b1', 0, 0, 40, -Math.PI / 2),
-      b('b3', 'arm_L', 'b1', 0, 0, 70, -Math.PI / 4),
-    ],
+    skeleton: buildHumanoid(),
     clips: [{ name: 'action_01', duration_s: 1, keyframes: [] }],
   }
 }

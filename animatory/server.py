@@ -95,6 +95,13 @@ async def lifespan(app: FastAPI):
     image_job_store = ImageJobStore(db_path)
     await image_job_store.init()
 
+    # deform: mesh-deform backend (triangulate + auto-weight + persist) under /studio.
+    # MeshData is durable (aiosqlite); jobs are ephemeral in-memory.
+    from animatory.deform.store import MeshJobStore, MeshStore
+    mesh_store = MeshStore(db_path)
+    await mesh_store.init()
+    mesh_jobs = MeshJobStore()
+
     app.state.registry = registry
     app.state.store = store
     app.state.executor_map = executor_map
@@ -105,11 +112,14 @@ async def lifespan(app: FastAPI):
     app.state.image_engine = image_engine
     app.state.image_cfg = image_cfg
     app.state.image_out_dir = str(image_cfg.out_dir)
+    app.state.mesh_store = mesh_store
+    app.state.mesh_jobs = mesh_jobs
 
     yield
 
     await studio_store.close()
     await image_job_store.close()
+    await mesh_store.close()
 
 
 app = FastAPI(title="Animatory Backend", version="0.1.0", lifespan=lifespan)
@@ -136,6 +146,8 @@ from animatory.genimage.imagegen.router import router as imagegen_router
 app.include_router(imagegen_router)
 from animatory.genvoice.router import router as genvoice_router
 app.include_router(genvoice_router)
+from animatory.deform.router import router as deform_router
+app.include_router(deform_router)
 
 # Serve generated images so JobView.image_url resolves over HTTP (Z-Image artifacts
 # otherwise live only on disk). The directory is created so StaticFiles can mount it.
