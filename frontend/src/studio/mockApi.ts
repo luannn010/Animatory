@@ -5,6 +5,7 @@ import type {
 } from './types'
 import { PHASE_ORDER, PRE_TRACKS } from './phases'
 import { buildHumanoid } from './rig/humanoid'
+import { seedCanvasScenes, type CanvasScene } from './canvas/canvasData'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -200,11 +201,13 @@ function seedRig(assetId: string): RigDoc {
 let projects: Project[] = seedProjects()
 let newProjectCounter = 0
 let rigs: Record<string, RigDoc> = {}
+let canvasScenes: CanvasScene[] = seedCanvasScenes()
 
 export function __resetStudioState(): void {
   projects = seedProjects()
   newProjectCounter = 0
   rigs = {}
+  canvasScenes = seedCanvasScenes()
 }
 
 function find(id: string): Project {
@@ -286,6 +289,9 @@ export const studioApi = {
   },
   async getAnimatic(projectId: string): Promise<Animatic> {
     await delay(); find(projectId); return seedAnimatic(projectId)
+  },
+  async getCanvasScenes(projectId: string): Promise<CanvasScene[]> {
+    await delay(); find(projectId); return clone(canvasScenes)
   },
 
   // ── Rig editor (bones-only v1) ─────────────────────────────────────────────
