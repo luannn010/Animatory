@@ -9,7 +9,7 @@ function AssetCard({ asset, onOpen, onDeform }: {
   asset: DesignAsset; onOpen: (a: DesignAsset) => void; onDeform?: (a: DesignAsset) => void
 }) {
   const hasArt = asset.stage !== 'rough' || asset.candidates.length > 0 || !!asset.refImageUrl
-  const canDeform = asset.kind === 'character' && !!asset.refImageUrl && !!onDeform
+  const canDeform = asset.kind === 'character' && !!onDeform
   return (
     <Card interactive flush className="overflow-hidden" onClick={() => onOpen(asset)}>
       <PlateThumb
@@ -36,7 +36,7 @@ function AssetCard({ asset, onOpen, onDeform }: {
             onClick={e => { e.stopPropagation(); onDeform!(asset) }}
             className="mt-0.5 inline-flex items-center justify-center gap-1 rounded-md border border-hairline px-2 py-1 text-xs font-medium text-steel transition-colors hover:border-[#3772cf]/50 hover:text-[#3772cf] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]"
           >
-            Open in deform
+            Open rig studio
           </button>
         )}
       </div>
@@ -79,7 +79,7 @@ export function DesignTrackView() {
   }, [id])
 
   const open = (a: DesignAsset) => navigate(`/project/${id}/pre/design/${a.kind}/${a.id}`)
-  const openDeform = () => navigate('/deform')
+  const openRig = (a: DesignAsset) => navigate(`/project/${id}/pre/rig/${a.id}`)
 
   if (error) return <p className="text-sm text-brand-error">{error}</p>
   if (!assets) {
@@ -98,7 +98,7 @@ export function DesignTrackView() {
         sub="Every character, location and prop — auto-seeded from the entity registry."
         done={locked} total={assets.length} unit="locked"
       />
-      <Section kind="character" label="Characters" icon="user" assets={assets} onOpen={open} onDeform={openDeform} />
+      <Section kind="character" label="Characters" icon="user" assets={assets} onOpen={open} onDeform={openRig} />
       <Section kind="location" label="Locations" icon="map-pin" assets={assets} onOpen={open} />
       <Section
         kind="prop" label="Props" icon="package" assets={assets} onOpen={open}

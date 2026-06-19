@@ -26,7 +26,6 @@ const isDrawn = (id: string) => /^b\d+$/.test(id) // hand-drawn bones; the human
 const MODES: { id: RigMode; label: string; v2?: boolean }[] = [
   { id: 'rig', label: 'Rig' },
   { id: 'pose', label: 'Pose' },
-  { id: 'deform', label: 'Deform' },
 ]
 
 function depthOf(bones: Bone[], id: string): number {
@@ -97,6 +96,7 @@ export function RigEditorView() {
   const [loop, setLoop] = useState(true)
   const [charName, setCharName] = useState('')
   const [deformChar, setDeformChar] = useState<RigAsset | null>(null)
+  const [showDeform, setShowDeform] = useState(false)  // deform lives on the canvas, toggled (not a mode tab)
   const [scrubbing, setScrubbing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -254,6 +254,7 @@ export function RigEditorView() {
           </ToolButton>
           <ToolButton icon="upload" onClick={importCharacter}>Import character</ToolButton>
           <ToolButton icon="x" onClick={clearBones} disabled={state.bones.length === 0}>Clear bones</ToolButton>
+          <ToolButton icon="layers" onClick={() => setShowDeform(d => !d)} active={showDeform}>{showDeform ? 'Deforming' : 'Deform'}</ToolButton>
           <span className="h-5 w-px bg-white/[0.13]" />
           <ToolButton icon="plus" primary onClick={() => dispatch({ type: 'addKeyframe' })} disabled={state.bones.length === 0}>Add keyframe</ToolButton>
           <input ref={fileRef} type="file" accept="application/json" className="hidden"
@@ -266,8 +267,8 @@ export function RigEditorView() {
 
       {error && <div className="flex-none border-b border-white/[0.07] bg-[#d45656]/10 px-5 py-2 text-xs text-[#e88981]">{error}</div>}
 
-      {/* BODY: hierarchy | stage | inspector — or the textured deform workspace */}
-      {state.mode === 'deform' ? (
+      {/* BODY: hierarchy | stage | inspector — or the textured deform workspace on the canvas */}
+      {showDeform ? (
         <div className="min-h-0 flex-1 overflow-auto bg-canvas p-5 text-ink">
           {deformChar
             ? <DeformWorkspace key={deformChar.jobId} character={deformChar} />
@@ -366,7 +367,7 @@ export function RigEditorView() {
       )}
 
       {/* TIMELINE */}
-      {state.mode !== 'deform' && (
+      {!showDeform && (
       <div className="flex-none border-t border-white/[0.07] bg-[#11161c] px-7 py-5">
         <div className="mb-5 flex items-center gap-5">
           <button onClick={playToggle} disabled={!canPlay} aria-label={state.playing ? 'Pause' : 'Play'}
