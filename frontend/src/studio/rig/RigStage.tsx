@@ -8,9 +8,26 @@
 //   • Playback   — while `live`, the skeleton renders in teal and is read-only.
 // The component owns SVG geometry only; the reducer owns the data model, so it
 // reports edits up via `onPoseBone` (rest-relative delta) and `onDrawBone`.
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Bone, RigMode } from '../types'
 import { resolveSkeleton, type Pose } from './fk'
+import { SKIN_WIDTHS, SKIN_HEAD, SKIN_FILL } from './humanoid'
+
+// Respect the user's motion preference for the selected-handle pulse.
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined' && !!window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const on = () => setReduced(mq.matches)
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  return reduced
+}
 
 export interface DrawnBone {
   parent: string | null
@@ -36,9 +53,9 @@ interface Props {
   onDrawBone?: (geom: DrawnBone) => void
 }
 
-const VB_W = 520
-const VB_H = 460
-const SNAP = 22 // svg units — a draw-start within this of a tip snaps to it
+const VB_W = 600
+const VB_H = 600
+const SNAP = 24 // svg units — a draw-start within this of a tip snaps to it
 const MIN_LEN = 12 // shorter drags read as a click, not a bone
 
 interface Draft {
@@ -54,6 +71,7 @@ export function RigStage({
 }: Props) {
   const resolved = resolveSkeleton(bones, pose)
   const byId = new Map(bones.map(b => [b.id, b]))
+  const reducedMotion = usePrefersReducedMotion()
 
   const svgRef = useRef<SVGSVGElement>(null)
   const dragRef = useRef<string | null>(null) // bone being posed
@@ -167,17 +185,17 @@ export function RigStage({
     : 'Select a bone, then switch to Pose to move it or turn on Draw bone to add.'
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-hairline bg-[#0f1419]">
-      <div className="pointer-events-none absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80 backdrop-blur-sm">
+    <div className="relative h-full w-full overflow-hidden bg-[#0f1419]">
+      <div className="pointer-events-none absolute left-3.5 top-3.5 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0c1116]/70 px-2.5 py-1 font-mono text-[11px] font-medium tracking-wide text-white/70 backdrop-blur-sm">
         <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-[#00d4a4]' : 'bg-[#3772cf]'}`} />
-        {modeLabel} mode
+        <span className="text-white/90">{modeLabel}</span> mode
       </div>
 
       {bones.length === 0 && !canDraw ? (
-        <div className="grid place-items-center px-6 text-center" style={{ aspectRatio: `${VB_W} / ${VB_H}` }}>
+        <div className="grid h-full place-items-center px-6 text-center">
           <p className="max-w-[280px] text-sm text-white/55">
             No skeleton yet. Turn on <span className="font-medium text-white/80">Draw bone</span> and drag on the
-            stage, or add a root from the hierarchy.
+            stage, or <span className="font-medium text-white/80">Import character</span> to load a humanoid rig.
           </p>
         </div>
       ) : (
@@ -187,8 +205,8 @@ export function RigStage({
           preserveAspectRatio="xMidYMid meet"
           role="application"
           aria-label="Rig stage"
-          className={`block w-full ${cursor}`}
-          style={{ aspectRatio: `${VB_W} / ${VB_H}`, touchAction: 'none' }}
+          className={`block h-full w-full ${cursor}`}
+          style={{ touchAction: 'none' }}
           onPointerDown={onStageDown}
           onPointerMove={onStageMove}
           onPointerUp={endStage}
@@ -202,17 +220,23 @@ export function RigStage({
           <rect x="0" y="0" width={VB_W} height={VB_H} fill="url(#rigGrid)" />
           <line x1={VB_W / 2} y1="0" x2={VB_W / 2} y2={VB_H} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
 
-          {/* soft body proxy — a translucent capsule per bone, standing in for
-              imported character art until layers are bound (§5). */}
-          <g opacity={live ? 0.12 : 0.08}>
+          {/* soft "skin" silhouette — stands in for imported character art and
+              deforms with the default humanoid. Only the named bones carry skin,
+              so a hand-drawn skeleton shows none. */}
+          <g opacity={live ? 0.22 : 0.16}>
             {bones.map(b => {
-              const r = resolved.get(b.id)
+              const w = SKIN_WIDTHS[b.id]
+              const r = w ? resolved.get(b.id) : undefined
               if (!r) return null
               return (
                 <line key={b.id} x1={r.x} y1={r.y} x2={r.tipX} y2={r.tipY}
-                  stroke="#ffffff" strokeWidth={Math.max(14, b.len * 0.34)} strokeLinecap="round" />
+                  stroke={SKIN_FILL} strokeWidth={w} strokeLinecap="round" />
               )
             })}
+            {(() => {
+              const head = resolved.get(SKIN_HEAD.boneId)
+              return head ? <circle cx={head.tipX} cy={head.tipY} r={SKIN_HEAD.r} fill={SKIN_FILL} /> : null
+            })()}
           </g>
 
           {/* bone shafts (tapered) + pivots */}
@@ -241,7 +265,11 @@ export function RigStage({
                 <circle cx={r.tipX} cy={r.tipY} r={sel ? 6.5 : 5}
                   fill={sel ? '#3772cf' : '#ffffff'}
                   stroke={live ? '#00d4a4' : sel ? '#84a8e0' : 'rgba(15,20,25,0.45)'}
-                  strokeWidth={sel ? 2.5 : 1.5} />
+                  strokeWidth={sel ? 2.5 : 1.5}>
+                  {sel && !live && !drawing && !reducedMotion && (
+                    <animate attributeName="r" values="6.5;7.2;6.5" dur="1.8s" repeatCount="indefinite" />
+                  )}
+                </circle>
               </g>
             )
           })}

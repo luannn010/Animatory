@@ -26,7 +26,8 @@ function indexBones(bones: Bone[]): Map<string, Bone> {
  * accumulating rest-relative offsets plus pose deltas.
  *
  *   root  → { x, y, angle: rest + delta }
- *   child → pivot = parent.tip; angle = parentAngle + (childRest − parentRest) + childDelta
+ *   child → pivot = parent.tip (or parent.start when attach==='start');
+ *           angle = parentAngle + (childRest − parentRest) + childDelta
  *   tip   → pivot + (cos, sin)·len
  *
  * `cache` (optional) memoizes resolved bones so a deep chain stays O(n).
@@ -61,8 +62,15 @@ export function resolveBone(
     const next = new Set(seen)
     next.add(boneId)
     const p = resolveBone(parent.id, byId, pose, cache, next)
-    pivotX = p.tipX
-    pivotY = p.tipY
+    // Most bones pivot on the parent's tip; a few (e.g. thigh→hip) attach at the
+    // parent's start so they fan out from the same joint as their parent.
+    if (bone.attach === 'start') {
+      pivotX = p.x
+      pivotY = p.y
+    } else {
+      pivotX = p.tipX
+      pivotY = p.tipY
+    }
     angle = p.angle + (bone.angle - parent.angle) + delta
   }
 

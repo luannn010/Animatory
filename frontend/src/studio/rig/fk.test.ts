@@ -72,6 +72,32 @@ describe('resolveBone', () => {
     expect(near(r.tipY, 100)).toBe(true)
   })
 
+  it("attach:'start' pivots the child on the parent's start, not its tip", () => {
+    // Parent runs +x from (0,0) to tip (100,0). A start-attached child rests at
+    // +90° → it must pivot at the parent's START (0,0) and point +y, not from the tip.
+    const root = bone({ id: 'b1', x: 0, y: 0, len: 100, angle: 0 })
+    const child = bone({ id: 'b2', parent: 'b1', len: 100, angle: Math.PI / 2, attach: 'start' })
+    const r = resolveBone('b2', [root, child], {})
+    expect(near(r.x, 0)).toBe(true)        // pivot = parent start, not tip (100)
+    expect(near(r.y, 0)).toBe(true)
+    expect(near(r.angle, Math.PI / 2)).toBe(true)
+    expect(near(r.tipX, 0)).toBe(true)
+    expect(near(r.tipY, 100)).toBe(true)
+  })
+
+  it("attach:'start' still inherits the parent's pose rotation", () => {
+    // Rotate the root +90° (now points +y, start stays at origin). The start-
+    // attached child keeps its +90° rest offset → absolute angle 180°, tip at (-100,0).
+    const root = bone({ id: 'b1', x: 0, y: 0, len: 100, angle: 0 })
+    const child = bone({ id: 'b2', parent: 'b1', len: 100, angle: Math.PI / 2, attach: 'start' })
+    const r = resolveBone('b2', [root, child], { b1: Math.PI / 2 })
+    expect(near(r.x, 0)).toBe(true)        // parent start unmoved by rotation
+    expect(near(r.y, 0)).toBe(true)
+    expect(near(r.angle, Math.PI)).toBe(true)
+    expect(near(r.tipX, -100)).toBe(true)
+    expect(near(r.tipY, 0, 1e-6)).toBe(true)
+  })
+
   it('treats a missing/broken parent as a root rather than throwing', () => {
     const orphan = bone({ id: 'b9', parent: 'nope', x: 5, y: 5 })
     const r = resolveBone('b9', [orphan], {})

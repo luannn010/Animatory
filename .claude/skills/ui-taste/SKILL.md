@@ -21,6 +21,12 @@ to build. This skill governs *how it looks*.
 1. **One accent, period.** Studio accent is `#3772cf`. Status colors
    (`#00b48a` done, `#c37d0d` warn, `#d45656` error, `#7c3aed` parse) are
    *semantic only* — never decorative. No second "nice" blue, no purple buttons.
+   **Sanctioned per-surface exceptions** (self-contained creative worlds, scoped
+   so their palette never leaks into app chrome): the **rig editor** (dark `#0f1419`
+   surface; teal `#00d4a4` for live playback/playhead/pose-Δ only) and the
+   **Canvas track** (paper/ink world scoped under `.ppc`; amber `#bd7e22` as its
+   sole brand hue; status colors reserved for the pipeline enum). New surfaces do
+   **not** get their own accent without an equivalent spec'd justification.
 2. **Use the token scale, never raw values.** Spacing, radius, and color come
    from `tailwind.config.js` (`surface`/`canvas`/`hairline`/`ink`/`steel`/`stone`,
    radius `xs|sm|md|lg`). An arbitrary `p-[13px]` or `#f3f4f6` is a bug.
