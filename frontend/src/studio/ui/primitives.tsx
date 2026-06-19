@@ -110,7 +110,6 @@ export function Chip({ selected, onClick, children }: { selected?: boolean; onCl
 
 const STAGE: Record<DesignStage, { label: string; cls: string; dot: string }> = {
   rough:    { label: 'Rough',     cls: 'bg-surface text-stone',          dot: 'bg-stone' },
-  bw_final: { label: 'B/W final', cls: 'bg-surface text-steel',          dot: 'bg-steel' },
   color:    { label: 'Color',     cls: 'bg-[#3772cf]/10 text-[#3772cf]', dot: 'bg-[#3772cf]' },
   locked:   { label: 'Locked',    cls: 'bg-[#00b48a]/10 text-[#00b48a]', dot: 'bg-[#00b48a]' },
 }

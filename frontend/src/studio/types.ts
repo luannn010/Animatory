@@ -72,7 +72,7 @@ export interface PostStage {
 // impl seeds these from EntityRegistry + PipelineScene.
 
 export type DesignKind = 'character' | 'location' | 'prop'
-export type DesignStage = 'rough' | 'bw_final' | 'color' | 'locked'
+export type DesignStage = 'rough' | 'color' | 'locked'
 
 export interface GenCandidate {
   id: string

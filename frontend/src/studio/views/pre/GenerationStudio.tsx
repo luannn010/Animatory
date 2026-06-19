@@ -5,7 +5,7 @@ import { loadDesignAssets } from '../../entityAssets'
 import { Button, Card, Chip, Icon, PlateThumb, Textarea, BackLink } from '../../ui'
 
 const STAGE_LABEL: Record<DesignStage, string> = {
-  rough: 'Rough', bw_final: 'B/W final', color: 'Color', locked: 'Locked',
+  rough: 'Rough', color: 'Color', locked: 'Locked',
 }
 
 function StageSelector({ stages, value, onChange }: {
