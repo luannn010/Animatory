@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Outlet } from 'react-router-dom'
+import { useParams, useLocation, Outlet } from 'react-router-dom'
 import type { Project } from '../types'
 import { studioApi } from '../api'
 import { PhaseStepperBar } from '../components/PhaseStepperBar'
@@ -7,12 +7,18 @@ import { TrackTabs } from '../components/TrackTabs'
 
 // Layout route for /project/:id/pre — phase stepper + track tabs + the active
 // track's view via <Outlet/>. Sub-routes render the per-track pages.
+//
+// The rig editor is a full-bleed, full-height tool surface: on that route we drop
+// the page chrome (max-width, phase heading, track tabs) and let the editor own
+// the viewport. Its own header carries the "← Design" back link.
 export function PreShell() {
   const { id = '' } = useParams()
+  const flushEditor = /\/pre\/rig(\/|$)/.test(useLocation().pathname)
   const [project, setProject] = useState<Project | null>(null)
 
   useEffect(() => { studioApi.getProject(id).then(setProject) }, [id])
 
+  if (flushEditor) return <Outlet />
   if (!project) return <div className="text-sm text-stone">Loading…</div>
 
   async function rename(title: string) { setProject(await studioApi.updateProjectTitle(id, title)) }

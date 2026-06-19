@@ -169,6 +169,7 @@ export interface Bone {
   y: number                               // root pivot y in canvas space
   len: number                             // px
   angle: number                           // rest angle, absolute radians
+  attach?: 'tip' | 'start'                // pivot on parent: tip (default) or start (e.g. thigh→hip)
   limits?: { min: number; max: number }   // v2 joint clamp — reserve now
   mesh: null                              // v2 deform mesh — ALWAYS null in v1
 }

@@ -45,17 +45,19 @@ function Candidate({ id, kind, ratio, index, selected, onSelect }: {
   return (
     <Card interactive selected={selected} flush className="group relative overflow-hidden" onClick={onSelect}>
       <PlateThumb id={`${id}-c${index}`} kind={kind} ratio={ratio} />
-      <div className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border transition-colors ${
-        selected ? 'border-[#3772cf] bg-[#3772cf] text-white' : 'border-white/60 bg-black/20 text-transparent'
+      <div className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border transition-opacity ${
+        selected
+          ? 'border-[#3772cf] bg-[#3772cf] text-white opacity-100'
+          : 'border-white/70 bg-black/30 text-white opacity-0 group-hover:opacity-100'
       }`}>
         <Icon name="check" size={14} />
       </div>
-      <div className="flex items-center justify-between px-2 py-1.5">
-        <span className="font-mono text-[11px] text-stone">v{index + 1}</span>
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/65 to-transparent px-2.5 py-2">
+        <span className="font-mono text-[11px] text-white/90">v{index + 1}</span>
         <button
           title="Regenerate" aria-label="Regenerate candidate"
           onClick={e => { e.stopPropagation() }}
-          className="text-stone hover:text-[#3772cf] transition-colors"
+          className="text-white/70 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
         >
           <Icon name="refresh" size={14} />
         </button>
@@ -101,7 +103,7 @@ export function GenerationStudio({ kind, stages, ratio, useReference, useTags }:
     return (
       <div>
         <BackLink onClick={() => navigate(`/project/${id}/pre/design`)}>Design</BackLink>
-        <div className="mt-4 grid grid-cols-[300px_1fr] gap-6" aria-hidden="true">
+        <div className="mt-4 grid grid-cols-[340px_1fr] gap-6" aria-hidden="true">
           <div className="h-96 rounded-lg anmt-skeleton" />
           <div className="h-96 rounded-lg anmt-skeleton" />
         </div>
@@ -130,8 +132,8 @@ function StudioBody({ asset, kind, stages, ratio, useReference, useTags, onBack,
   const lockLabel = useReference ? 'Lock reference' : kind === 'location' ? 'Lock background' : 'Lock design'
   const gridCols = useMemo(
     () => kind === 'location' ? 'grid-cols-[repeat(auto-fill,minmax(280px,1fr))]'
-      : kind === 'prop' ? 'grid-cols-[repeat(auto-fill,minmax(150px,1fr))]'
-      : 'grid-cols-[repeat(auto-fill,minmax(160px,1fr))]',
+      : kind === 'prop' ? 'grid-cols-[repeat(auto-fill,minmax(170px,1fr))]'
+      : 'grid-cols-[repeat(auto-fill,minmax(150px,1fr))]',
     [kind],
   )
 
@@ -149,21 +151,21 @@ function StudioBody({ asset, kind, stages, ratio, useReference, useTags, onBack,
             <span className="text-base font-semibold text-ink">{asset.displayName}</span>
             <span className="font-mono text-xs text-stone">{asset.id}</span>
           </div>
-          <Button size="sm" variant="ghost" icon="refresh" className="ml-auto" onClick={() => setStage('color')}>Unlock &amp; revise</Button>
+          <div className="ml-auto flex items-center gap-2">
+            {onOpenRig && (
+              <Button size="sm" variant="secondary" icon="layers" onClick={onOpenRig}>Rig character</Button>
+            )}
+            <Button size="sm" variant="ghost" icon="refresh" onClick={() => setStage('color')}>Unlock &amp; revise</Button>
+          </div>
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
+      <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
         {/* Brief */}
-        <aside className="flex flex-col gap-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h1 className="text-lg font-semibold text-ink">{asset.displayName}</h1>
-              <span className="font-mono text-xs text-stone">{asset.id}</span>
-            </div>
-            {onOpenRig && (
-              <Button size="sm" variant="secondary" icon="layers" onClick={onOpenRig}>Open rig editor</Button>
-            )}
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
+          <div>
+            <h1 className="text-lg font-semibold text-ink">{asset.displayName}</h1>
+            <span className="font-mono text-xs text-stone">{asset.id}</span>
           </div>
 
           <Textarea label="Generation prompt" rows={kind === 'prop' ? 4 : 6} value={prompt} onChange={e => setPrompt(e.target.value)} />
