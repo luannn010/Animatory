@@ -20,6 +20,8 @@ import { DialogueStudioView } from './studio/views/pre/DialogueStudioView'
 import { AnimaticView } from './studio/views/pre/AnimaticView'
 import { CheckingGateView } from './studio/views/pre/CheckingGateView'
 import { RigEditorView } from './studio/views/pre/RigEditorView'
+import { CanvasSceneBoard, CanvasIndexRedirect } from './studio/canvas/CanvasSceneBoard'
+import { CanvasShotDetail } from './studio/canvas/CanvasShotDetail'
 import { ProductionView } from './studio/views/ProductionView'
 import { PostView } from './studio/views/PostView'
 import { DeformStudioView } from './studio/views/DeformStudioView'
@@ -43,6 +45,10 @@ export default function App() {
           {/* Rig editor (bones-only v1) — a property of a character Asset */}
           <Route path="rig" element={<RigEditorView />} />
           <Route path="rig/:assetId" element={<RigEditorView />} />
+          {/* Canvas track — Scene Board → Shot Detail (Rig Studio = Step 2) */}
+          <Route path="canvas" element={<CanvasIndexRedirect />} />
+          <Route path="canvas/:sceneId" element={<CanvasSceneBoard />} />
+          <Route path="canvas/:sceneId/:shotId" element={<CanvasShotDetail />} />
           <Route path="storyboard" element={<StoryboardTrackView />} />
           <Route path="storyboard/scene/:sceneId" element={<PanelBoardView />} />
           <Route path="audio" element={<AudioCastingView />} />
