@@ -120,13 +120,13 @@ function seedPostStages(projectId: string): PostStage[] {
 function seedDesignAssets(projectId: string): DesignAsset[] {
   const base: Omit<DesignAsset, 'id' | 'projectId' | 'candidates'>[] = [
     { kind: 'character', sourceEntity: 'Hana', displayName: 'Hana', promptText: 'young woman, red hair, determined', refImageUrl: null, stage: 'color', lockedRef: null },
-    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'bw_final', lockedRef: null },
+    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'color', lockedRef: null },
     { kind: 'location', sourceEntity: 'Apartment', displayName: 'Hana\'s Apartment', promptText: 'cramped city apartment, night, rain', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'location', sourceEntity: 'Office', displayName: 'Riku\'s Office', promptText: 'cluttered office, monitors glowing', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
     { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
   ]
-  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, bw_final: 3, color: 4, locked: 3 }
+  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, color: 4, locked: 3 }
   return base.map((a, i) => {
     const id = `${projectId}-da${i + 1}`
     const n = COUNT[a.stage]

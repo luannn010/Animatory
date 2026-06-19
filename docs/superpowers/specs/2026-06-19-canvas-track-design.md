@@ -137,8 +137,50 @@ check — `/pre/rig` → full-flush, `/pre/canvas` → track-flush.
   edit notes, see the status strip → **Back to Board**. Tabs remain switchable.
 - DOM/computed-style probes for proof (screenshots stall in this env, per Pass 1).
 
-## Out of scope (Step 2 / later)
+## Out of scope (Step 1)
 
-- **`PPC_RigStudio`** (tool rail, character dock, keyframe timeline) — Step 2.
-- Real shot/scene persistence, "Add Shot"/"Open Studio" behavior, generation.
+- Real shot/scene persistence, "Add Shot" behavior, generation.
 - Retiring the Storyboard/Audio views (only their tabs are removed here).
+
+---
+
+## Step 2a — Rig Studio (core)
+
+The `PPC_RigStudio` is the Canvas track's animation editor, reached via **Open
+Studio** from a shot. It is ~2,000 lines; **Step 2a builds the coherent core**
+and defers the heaviest authoring to **2b** (user's choice).
+
+**In 2a:**
+- **Route** `/pre/canvas/:sceneId/:shotId/studio` → `CanvasRigStudio`; "Open
+  Studio" (board ShotCard + Shot Detail bar) goes live. The studio is an
+  immersive editor → **full-flush** (no track tabs; own "Back to Board"), so
+  `PreShell` treats a `/studio` suffix as `full` (like the rig editor).
+- **Studio data** — static `CHAR_LIB` / `LOC_LIB` / `OBJ_LIB` (id+name+kind,
+  mirroring the fixture) + `charById` / `locById` in `canvasData.ts`.
+- **Shell** — the `.ppc-studio` grid (tool rail · Characters dock · center ·
+  right widget) + bar (scene/shot **cascading dropdowns**, status pill, Back to
+  Board). Local `Dropdown` + a `studioGlyphs` module (the kit's transport/tool
+  SVG glyphs — not in the shared Icon set).
+- **Tool rail** — Select / Pose / Pan / Zoom + Add-keyframe + ink swatch.
+- **Characters dock** — layer list (auto-seeded cast) + per-layer visibility.
+  (Manual import picker = 2b; canvas auto-seeds from `shot.characters` +
+  `scene.location`.)
+- **Canvas** — background plate + draggable **figure layers** (Pose tool),
+  zoom/pan (Zoom/Hand + wheel), background control, zoom HUD, layer-count badge.
+- **Timeline** — extendable (drag-resize): transport (first/prev-key/prev-frame/
+  play/next-frame/next-key/last, loop, fps, keyframe, frame+time readout), track
+  heads (reorder, collapse, visibility), lanes with per-character **presence
+  bands** (drag enter/exit) + **keyframe** diamonds + ruler + playhead, scrub,
+  and **playback** (figure layers interpolate from their keyframes). Clip
+  inspector for the selected presence band.
+- **Right widget** — icon rail (section switch) + the **Script** section
+  (read-only action/dialogue). Other sections show a "2b" placeholder.
+
+**Deferred to 2b:** multi-track **clip authoring** (action/voice/object/effect/
+sfx — add/drag/trim/split/sub-lanes), the 5 right-panel **generators**, **canvas
+object/effect sprites**, and the **picker modals**.
+
+**Verify:** `tsc -b` + `vite build` green; preview — board → Open Studio
+(full-flush) → drag a figure to pose, zoom/pan, add a keyframe, scrub/play
+(figure interpolates), drag a presence band, resize the timeline, switch
+scene/shot via the dropdowns, Back to Board.

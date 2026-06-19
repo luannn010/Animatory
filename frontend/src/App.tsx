@@ -22,6 +22,7 @@ import { CheckingGateView } from './studio/views/pre/CheckingGateView'
 import { RigEditorView } from './studio/views/pre/RigEditorView'
 import { CanvasSceneBoard, CanvasIndexRedirect } from './studio/canvas/CanvasSceneBoard'
 import { CanvasShotDetail } from './studio/canvas/CanvasShotDetail'
+import { CanvasRigStudio } from './studio/canvas/CanvasRigStudio'
 import { ProductionView } from './studio/views/ProductionView'
 import { PostView } from './studio/views/PostView'
 import { DeformStudioView } from './studio/views/DeformStudioView'
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="canvas" element={<CanvasIndexRedirect />} />
           <Route path="canvas/:sceneId" element={<CanvasSceneBoard />} />
           <Route path="canvas/:sceneId/:shotId" element={<CanvasShotDetail />} />
+          <Route path="canvas/:sceneId/:shotId/studio" element={<CanvasRigStudio />} />
           <Route path="storyboard" element={<StoryboardTrackView />} />
           <Route path="storyboard/scene/:sceneId" element={<PanelBoardView />} />
           <Route path="audio" element={<AudioCastingView />} />

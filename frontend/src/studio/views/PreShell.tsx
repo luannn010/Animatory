@@ -20,8 +20,9 @@ export function PreShell() {
   const path = useLocation().pathname
   const flushMode: 'none' | 'track' | 'full' =
     /\/pre\/rig(\/|$)/.test(path) ? 'full'
-      : /\/pre\/canvas(\/|$)/.test(path) ? 'track'
-        : 'none'
+      : /\/pre\/canvas\/[^/]+\/[^/]+\/studio(\/|$)/.test(path) ? 'full'
+        : /\/pre\/canvas(\/|$)/.test(path) ? 'track'
+          : 'none'
   const [project, setProject] = useState<Project | null>(null)
 
   useEffect(() => { studioApi.getProject(id).then(setProject) }, [id])

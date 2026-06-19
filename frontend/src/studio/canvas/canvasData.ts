@@ -92,3 +92,26 @@ export function shotById(scene: CanvasScene, id: string | undefined): CanvasShot
 export function animatedCount(scene: CanvasScene): number {
   return scene.shots.filter(sh => isAnimated(sh.status)).length
 }
+
+// ── studio libraries (entity registry stand-ins; used by the Rig Studio) ──────
+export interface LibEntry { id: string; name: string; kind: 'character' | 'location' | 'prop' }
+
+export const CHAR_LIB: LibEntry[] = [
+  { id: 'char_0117-mara', name: 'Mara', kind: 'character' },
+  { id: 'char_0118-kade', name: 'Kade', kind: 'character' },
+  { id: 'char_0119-brkr', name: 'The Broker', kind: 'character' },
+  { id: 'char_0120-nan', name: 'Nan', kind: 'character' },
+]
+export const LOC_LIB: LibEntry[] = [
+  { id: 'loc_0431-alley', name: 'Rain Alley', kind: 'location' },
+  { id: 'loc_0432-roof', name: 'Syndicate Roof', kind: 'location' },
+  { id: 'loc_0433-safe', name: 'Safehouse', kind: 'location' },
+  { id: 'loc_0434-term', name: 'Transit Terminal', kind: 'location' },
+]
+export const OBJ_LIB: LibEntry[] = [
+  { id: 'prop_0210-slate', name: 'Data-slate', kind: 'prop' },
+  { id: 'prop_0211-pend', name: 'Pendant', kind: 'prop' },
+]
+
+export function charById(id: string): LibEntry | undefined { return CHAR_LIB.find(c => c.id === id) }
+export function locById(id: string): LibEntry | undefined { return LOC_LIB.find(l => l.id === id) }
