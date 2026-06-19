@@ -24,7 +24,7 @@ export function phasePath(projectId: string, phase: Phase): string {
   return `/project/${projectId}/${PHASE_PATH[phase]}`
 }
 
-export function preTrackPath(projectId: string, track: TrackId | 'animatic' | 'checking'): string {
+export function preTrackPath(projectId: string, track: TrackId | 'canvas' | 'animatic' | 'checking'): string {
   return `/project/${projectId}/pre/${track}`
 }
 
