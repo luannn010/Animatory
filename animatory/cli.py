@@ -8,14 +8,14 @@ import os
 import pathlib
 import sys
 
-from animatory.registry import load_registry
-from animatory.run_store import InMemoryRunStore
-from animatory.base_agent import BaseAgent
-from animatory.models import RunRequest
-from animatory.executors.fake import FakeExecutor
-from animatory.executors.comfyui import ComfyUIExecutor
-from animatory.executors.llamacpp import LlamaCppExecutor
-from animatory.chunker import chunk_file
+from animatory.runtime.registry import load_registry
+from animatory.runtime.run_store import InMemoryRunStore
+from animatory.runtime.base_agent import BaseAgent
+from animatory.runtime.models import RunRequest
+from animatory.runtime.executors.fake import FakeExecutor
+from animatory.runtime.executors.comfyui import ComfyUIExecutor
+from animatory.runtime.executors.llamacpp import LlamaCppExecutor
+from animatory.parsing.chunker import chunk_file
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ def cmd_chunk(args: argparse.Namespace) -> None:
 
     if args.parse:
         import asyncio as _asyncio
-        from animatory.scene_parser import parse_episode
+        from animatory.parsing.scene_parser import parse_episode
         _asyncio.run(parse_episode(
             source.stem,
             manifest_path.parent,
@@ -137,8 +137,9 @@ def cmd_chunk(args: argparse.Namespace) -> None:
 
 def cmd_prompts(args: argparse.Namespace) -> None:
     from datetime import datetime, timezone
-    from animatory import entity_registry, prompt_compiler, visual_inference
-    from animatory.scene_parser import _qwen_env
+    from animatory.parsing import entity_registry
+    from animatory.enrichment import prompt_compiler, visual_inference
+    from animatory.llm.qwen import _qwen_env
 
     episode_dir = pathlib.Path(args.episode_dir)
     if not episode_dir.exists():

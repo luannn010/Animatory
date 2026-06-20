@@ -12,12 +12,15 @@ from pathlib import Path
 from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
-from animatory import entity_registry, prompt_compiler, scene_source, visual_inference
-from animatory.chunker import chunk_file
-from animatory.models import RunRecord, RunStatusEnum
-from animatory.scene_parser import ChatUnavailableError, _qwen_env, parse_episode, reparse_scene
-from animatory.chat_engine import stream_chat, generate_title
-from animatory.voice_profiles import aggregate
+from animatory.parsing import entity_registry, scene_source
+from animatory.parsing.chunker import chunk_file
+from animatory.runtime.models import RunRecord, RunStatusEnum
+from animatory.parsing.scene_parser import ChatUnavailableError, parse_episode, reparse_scene
+from animatory.chat.engine import stream_chat, generate_title
+from animatory.enrichment.voice_profiles import aggregate
+from animatory.enrichment.entity_enrichment import enrich_entities
+from animatory.enrichment import prompt_compiler, visual_inference
+from animatory.llm.qwen import _call_qwen, _qwen_env
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,24 @@ def _scenes_payload(ep_dir: Path, chunk_id: str) -> dict | None:
         return None
     doc["edited"] = is_edited
     return doc
+
+
+def _all_scenes(ep_dir: Path) -> list[dict]:
+    """Every parsed scene across the episode (edited-preferred), flattened.
+
+    Shared by the voice-profiles route and the on-demand enrich run so both see
+    exactly the same scene set the parse-time enrichment does.
+    """
+    manifest_path = ep_dir / "manifest.json"
+    if not manifest_path.exists():
+        return []
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    out: list[dict] = []
+    for c in manifest.get("chunks", []):
+        doc = _scenes_payload(ep_dir, c["chunk_id"])
+        if doc:
+            out.extend(doc.get("scenes", []))
+    return out
 
 
 def _now() -> str:
@@ -188,6 +209,13 @@ class AliasEntry(BaseModel):
 class EntityRegistryRequest(BaseModel):
     characters: list[AliasEntry] = []
     locations: list[AliasEntry] = []
+
+
+class EnrichRequest(BaseModel):
+    # None enriches every character + location; a canonical name scopes the run to
+    # just that entity. force=True overwrites even human-edited fields.
+    canonical: str | None = None
+    force: bool = False
 
 
 class ChatMentions(BaseModel):
@@ -498,13 +526,84 @@ async def get_voice_profiles(episode_id: str):
     ep_dir = _processed_dir() / episode_id
     if not (ep_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
-    manifest = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))
-    all_scenes: list[dict] = []
-    for c in manifest.get("chunks", []):
-        doc = _scenes_payload(ep_dir, c["chunk_id"])
-        if doc:
-            all_scenes.extend(doc.get("scenes", []))
-    return {"episode_id": episode_id, "profiles": aggregate(all_scenes)}
+    return {"episode_id": episode_id, "profiles": aggregate(_all_scenes(ep_dir))}
+
+
+@router.post("/episodes/{episode_id}/enrich")
+async def enrich_episode_entities(
+    episode_id: str,
+    request: Request,
+    body: EnrichRequest = Body(default=EnrichRequest()),
+):
+    """Run the existing entity-enrichment engine on demand over already-parsed
+    scenes — no re-parse. Returns a ``run_id`` and streams ``entity_described`` /
+    ``voice_profiles`` over ``/runs/{run_id}/stream`` exactly like a parse run, so
+    the registry panel can fill descriptions live. ``canonical`` scopes the run to
+    one entity; omit it to enrich the whole episode.
+    """
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+    scenes = _all_scenes(ep_dir)
+    if not scenes:
+        raise HTTPException(status_code=409, detail="No parsed scenes yet — parse a chapter first")
+
+    store = request.app.state.store
+    run_id = str(uuid.uuid4())
+    record = RunRecord(
+        run_id=run_id,
+        agent_id=f"pipeline.enrich.{episode_id}",
+        status=RunStatusEnum.queued,
+        started_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    await store.create(record)
+
+    only = {entity_registry._key(body.canonical)} if body.canonical else None
+    logger.info("[enrich] run=%s episode=%s queued (target=%s)",
+                run_id, episode_id, body.canonical or "all")
+
+    async def _emit_event(ev_type: str, payload: dict):
+        rec = await store.get(run_id)
+        await store.update(run_id, events=(rec.events or []) + [{"type": ev_type, "payload": payload}])
+
+    async def _on_entity(kind: str, entry: dict):
+        singular = "character" if kind == "characters" else "location"
+        await _emit_event("entity_described", {"kind": singular, "entry": entry})
+
+    async def _run():
+        logger.info("[enrich] run=%s episode=%s started", run_id, episode_id)
+        await store.update(run_id, status=RunStatusEnum.running)
+        try:
+            endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(None)
+            qwen = dict(endpoint=endpoint, model_name=model_name, retries=retries,
+                        timeout_s=timeout_s, enable_thinking=enable_thinking)
+            registry = entity_registry.load(episode_id, ep_dir)
+            registry.learn(scenes)  # idempotent — ensures names exist if entities.json is stale
+            # Voices are a pure aggregate (no LLM); emit first so the panel matches a parse run.
+            await _emit_event("voice_profiles", {"profiles": aggregate(scenes)})
+            await enrich_entities(
+                registry, scenes, call_fn=_call_qwen, qwen=qwen,
+                force=body.force, on_entity=_on_entity, only=only,
+            )
+            entity_registry.save(registry, ep_dir, now=_now())
+            logger.info("[enrich] run=%s episode=%s done", run_id, episode_id)
+            await store.update(
+                run_id,
+                status=RunStatusEnum.done,
+                finished_at=datetime.datetime.now(datetime.timezone.utc),
+                logs=[f"Enriched {episode_id}" + (f" ({body.canonical})" if body.canonical else "")],
+            )
+        except Exception as exc:
+            logger.exception("[enrich] run=%s episode=%s FAILED: %s", run_id, episode_id, exc)
+            await store.update(
+                run_id,
+                status=RunStatusEnum.failed,
+                finished_at=datetime.datetime.now(datetime.timezone.utc),
+                error=str(exc),
+            )
+
+    asyncio.create_task(_run())
+    return {"run_id": run_id}
 
 
 @router.post("/episodes/{episode_id}/infer-visuals")

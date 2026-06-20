@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from animatory import entity_registry as er
-from animatory import visual_inference as vi
+from animatory.parsing import entity_registry as er
+from animatory.enrichment import visual_inference as vi
 
 
 def _seed_episode(tmp_path):

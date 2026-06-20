@@ -20,8 +20,12 @@ import { DialogueStudioView } from './studio/views/pre/DialogueStudioView'
 import { AnimaticView } from './studio/views/pre/AnimaticView'
 import { CheckingGateView } from './studio/views/pre/CheckingGateView'
 import { RigEditorView } from './studio/views/pre/RigEditorView'
+import { CanvasSceneBoard, CanvasIndexRedirect } from './studio/canvas/CanvasSceneBoard'
+import { CanvasShotDetail } from './studio/canvas/CanvasShotDetail'
+import { CanvasRigStudio } from './studio/canvas/CanvasRigStudio'
 import { ProductionView } from './studio/views/ProductionView'
 import { PostView } from './studio/views/PostView'
+import { DeformStudioView } from './studio/views/DeformStudioView'
 
 export default function App() {
   return (
@@ -42,6 +46,11 @@ export default function App() {
           {/* Rig editor (bones-only v1) — a property of a character Asset */}
           <Route path="rig" element={<RigEditorView />} />
           <Route path="rig/:assetId" element={<RigEditorView />} />
+          {/* Canvas track — Scene Board → Shot Detail (Rig Studio = Step 2) */}
+          <Route path="canvas" element={<CanvasIndexRedirect />} />
+          <Route path="canvas/:sceneId" element={<CanvasSceneBoard />} />
+          <Route path="canvas/:sceneId/:shotId" element={<CanvasShotDetail />} />
+          <Route path="canvas/:sceneId/:shotId/studio" element={<CanvasRigStudio />} />
           <Route path="storyboard" element={<StoryboardTrackView />} />
           <Route path="storyboard/scene/:sceneId" element={<PanelBoardView />} />
           <Route path="audio" element={<AudioCastingView />} />
@@ -53,6 +62,8 @@ export default function App() {
         {/* Legacy redirect: /vendor → /production */}
         <Route path="/project/:id/vendor" element={<Navigate to="../production" relative="path" replace />} />
         <Route path="/project/:id/post" element={<PostView />} />
+        {/* Mesh deform (Deform v2) — minimal browser surface over the deform backend */}
+        <Route path="/deform" element={<DeformStudioView />} />
         {/* Surface C — agents / runs / metrics (untouched) */}
         <Route path="/agents" element={<AgentsView />} />
         <Route path="/runs" element={<RunsHistory />} />

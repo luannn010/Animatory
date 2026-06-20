@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 
-from animatory import entity_registry as er
-from animatory import prompt_compiler as pc
+from animatory.parsing import entity_registry as er
+from animatory.enrichment import prompt_compiler as pc
 
 
 def _char():

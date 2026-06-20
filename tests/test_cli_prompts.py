@@ -8,8 +8,8 @@ import sys
 import pytest
 
 from animatory import cli
-from animatory import entity_registry as er
-from animatory import visual_inference as vi
+from animatory.parsing import entity_registry as er
+from animatory.enrichment import visual_inference as vi
 
 
 def _episode(tmp_path):

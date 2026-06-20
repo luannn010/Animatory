@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from animatory.chat_engine import stream_chat, _build_messages
+from animatory.chat.engine import stream_chat, _build_messages
 
 
 def _sse_lines(chunks: list[dict]):
@@ -32,7 +32,7 @@ def _mock_stream(lines: list[str]):
     client_cm = MagicMock()
     client_cm.__aenter__ = AsyncMock(return_value=client)
     client_cm.__aexit__ = AsyncMock(return_value=False)
-    return patch("animatory.chat_engine.httpx.AsyncClient", return_value=client_cm)
+    return patch("animatory.chat.engine.httpx.AsyncClient", return_value=client_cm)
 
 
 async def _collect(gen):
@@ -119,7 +119,7 @@ async def test_stream_chat_emits_error_on_http_failure():
     client_cm = MagicMock()
     client_cm.__aenter__ = AsyncMock(return_value=client)
     client_cm.__aexit__ = AsyncMock(return_value=False)
-    with patch("animatory.chat_engine.httpx.AsyncClient", return_value=client_cm):
+    with patch("animatory.chat.engine.httpx.AsyncClient", return_value=client_cm):
         events = await _collect(stream_chat(
             chunk_id="C001", scene_index=[], mentioned_scenes=[], raw_text=None,
             messages=[{"role": "user", "content": "hi"}], thinking=False,
@@ -151,11 +151,11 @@ async def test_stream_chat_fallback_parses_trailing_json(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_title_uses_llm():
-    from animatory.chat_engine import generate_title
+    from animatory.chat.engine import generate_title
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"choices": [{"message": {"content": '"Bedroom Standoff"'}}]}
-    with patch("animatory.chat_engine.httpx.AsyncClient") as MockClient:
+    with patch("animatory.chat.engine.httpx.AsyncClient") as MockClient:
         inst = AsyncMock()
         inst.__aenter__ = AsyncMock(return_value=inst)
         inst.__aexit__ = AsyncMock(return_value=False)
@@ -167,9 +167,9 @@ async def test_generate_title_uses_llm():
 
 @pytest.mark.asyncio
 async def test_generate_title_falls_back_on_error():
-    from animatory.chat_engine import generate_title
+    from animatory.chat.engine import generate_title
     import httpx
-    with patch("animatory.chat_engine.httpx.AsyncClient") as MockClient:
+    with patch("animatory.chat.engine.httpx.AsyncClient") as MockClient:
         inst = AsyncMock()
         inst.__aenter__ = AsyncMock(return_value=inst)
         inst.__aexit__ = AsyncMock(return_value=False)

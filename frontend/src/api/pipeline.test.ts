@@ -1,6 +1,6 @@
 // frontend/src/api/pipeline.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, EMOTIONS, reparseScene, getSceneSource } from './pipeline'
+import { saveText, saveScenes, getEntities, saveEntities, getVoiceProfiles, enrichEntities, EMOTIONS, reparseScene, getSceneSource } from './pipeline'
 
 function mockFetch(body: unknown, ok = true, status = 200) {
   return vi.fn().mockResolvedValue({
@@ -61,6 +61,26 @@ describe('parse-enrichment clients', () => {
     const res = await getVoiceProfiles('ep1')
     expect(res.profiles[0].character).toBe('A')
     expect(f.mock.calls[0][0]).toContain('/pipeline/episodes/ep1/voice-profiles')
+  })
+
+  it('enrichEntities POSTs the enrich route with the canonical target and returns a run_id', async () => {
+    const f = mockFetch({ run_id: 'run-123' })
+    vi.stubGlobal('fetch', f)
+    const res = await enrichEntities('ep1', { canonical: 'Từ An' })
+    expect(res.run_id).toBe('run-123')
+    const [url, init] = f.mock.calls[0]
+    expect(url).toContain('/pipeline/episodes/ep1/enrich')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body).canonical).toBe('Từ An')
+  })
+
+  it('enrichEntities defaults to an empty body (enrich all) and throws on non-ok', async () => {
+    const ok = mockFetch({ run_id: 'r' })
+    vi.stubGlobal('fetch', ok)
+    await enrichEntities('ep1')
+    expect(JSON.parse(ok.mock.calls[0][1].body)).toEqual({})
+    vi.stubGlobal('fetch', mockFetch({ detail: 'no scenes' }, false, 409))
+    await expect(enrichEntities('ep1')).rejects.toThrow(/409/)
   })
 })
 

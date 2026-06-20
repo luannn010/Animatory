@@ -9,8 +9,8 @@ import json
 
 import pytest
 
-from animatory.entity_registry import EntityRegistry
-from animatory.item_extractor import extract_recurring_items
+from animatory.parsing.entity_registry import EntityRegistry
+from animatory.enrichment.item_extractor import extract_recurring_items
 
 SHOTS = [
     {"id": "001", "action": "Rusty hammers a glowing bolt on the anvil. Sparks scatter."},

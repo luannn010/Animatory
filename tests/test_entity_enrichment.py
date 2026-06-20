@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from animatory import entity_enrichment as ee
-from animatory import entity_registry as er
+from animatory.enrichment import entity_enrichment as ee
+from animatory.parsing import entity_registry as er
 
 
 def _scenes():
@@ -159,6 +159,33 @@ async def test_enrich_survives_one_failing_entity():
     assert chamber["appears_in"] == ["C001_S01"]
     street = next(e for e in reg.locations if e["canonical"] == "Đường phố")
     assert street["description"]["summary"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_enrich_only_restricts_to_one_entity():
+    """`only` (a set of match keys) enriches just the named entity and never
+    touches the others — the per-entity Enrich button must not re-run the whole
+    episode through the LLM."""
+    calls = []
+
+    async def fake(prompt, *, label):
+        calls.append(label)
+        if label.startswith("enrich/loc/"):
+            return {"summary": "s", "setting": "", "lighting": "", "time_variants": []}
+        return {"description": {"summary": "", "appearance": "lean", "attire": "",
+                                "age_build": "", "palette": ""},
+                "voice": {"register": "", "tone": "", "pace": ""}}
+
+    reg = _registry()
+    await ee.enrich_entities(reg, _scenes(), call_fn=fake, qwen={}, only={er._key("Từ An")})
+
+    # Only Từ An hit the LLM — no other character, no locations.
+    assert calls == ["enrich/char/Từ An"]
+    tu_an = next(e for e in reg.characters if e["canonical"] == "Từ An")
+    assert tu_an["description"]["appearance"] == "lean"
+    # The other character is left exactly as `learn` produced it (not enriched).
+    other = next(e for e in reg.characters if e["canonical"] == "Tiểu Lan Nhi")
+    assert (other.get("description") or {}).get("appearance", "") == ""
 
 
 # ── describe_scenes ──────────────────────────────────────────────────────────

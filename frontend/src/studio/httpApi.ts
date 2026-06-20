@@ -3,6 +3,7 @@ import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase,
   DesignAsset, StoryboardPanel, VoiceCast, VoiceOption, DialogueClip, Animatic, RigDoc,
 } from './types'
+import type { CanvasScene } from './canvas/canvasData'
 
 const notImpl = (name: string): never => {
   throw new Error(`studioHttpApi.${name} not implemented — wire the real /studio route`)
@@ -52,6 +53,7 @@ export const studioHttpApi = {
   getVoiceOptions: (): Promise<VoiceOption[]> => notImpl('getVoiceOptions'),
   getDialogueClips: (_projectId: string, _sceneId?: string): Promise<DialogueClip[]> => notImpl('getDialogueClips'),
   getAnimatic: (_projectId: string): Promise<Animatic> => notImpl('getAnimatic'),
+  getCanvasScenes: (_projectId: string): Promise<CanvasScene[]> => notImpl('getCanvasScenes'),
 
   // Rig editor — real route TBD; mock is the source of truth for now.
   getRig: (assetId: string): Promise<RigDoc> => http<RigDoc>(`/rigs/${assetId}`),

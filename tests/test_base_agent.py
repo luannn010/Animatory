@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from animatory.models import (
+from animatory.runtime.models import (
     AgentDef,
     ExecutorResult,
     LayerEnum,
@@ -13,9 +13,9 @@ from animatory.models import (
     RunStatusEnum,
     StackEnum,
 )
-from animatory.base_agent import BaseAgent
-from animatory.executors.fake import FakeExecutor
-from animatory.run_store import InMemoryRunStore
+from animatory.runtime.base_agent import BaseAgent
+from animatory.runtime.executors.fake import FakeExecutor
+from animatory.runtime.run_store import InMemoryRunStore
 
 
 def _make_def(**overrides) -> AgentDef:
@@ -42,7 +42,7 @@ async def _make_store() -> InMemoryRunStore:
 async def test_run_returns_done():
     store = await _make_store()
     agent = BaseAgent(_make_def(), FakeExecutor(), store)
-    from animatory.models import RunRequest
+    from animatory.runtime.models import RunRequest
     record = await agent.run(RunRequest())
     assert record.status == RunStatusEnum.done
 
@@ -51,7 +51,7 @@ async def test_run_returns_done():
 async def test_run_id_stored():
     store = await _make_store()
     agent = BaseAgent(_make_def(), FakeExecutor(), store)
-    from animatory.models import RunRequest
+    from animatory.runtime.models import RunRequest
     record = await agent.run(RunRequest())
     assert record.run_id
     stored = await store.get(record.run_id)
@@ -63,7 +63,7 @@ async def test_run_id_stored():
 async def test_attempts_incremented():
     store = await _make_store()
     agent = BaseAgent(_make_def(), FakeExecutor(), store)
-    from animatory.models import RunRequest
+    from animatory.runtime.models import RunRequest
     record = await agent.run(RunRequest())
     assert record.attempts >= 1
 
@@ -72,7 +72,7 @@ async def test_attempts_incremented():
 async def test_outputs_populated():
     store = await _make_store()
     agent = BaseAgent(_make_def(), FakeExecutor(), store)
-    from animatory.models import RunRequest
+    from animatory.runtime.models import RunRequest
     record = await agent.run(RunRequest())
     assert len(record.outputs) > 0
 
@@ -86,7 +86,7 @@ async def test_on_fail_skip_status_done():
 
     store = await _make_store()
     agent = BaseAgent(_make_def(on_fail=OnFailEnum.skip), FailExec(), store)
-    from animatory.models import RunRequest
+    from animatory.runtime.models import RunRequest
     record = await agent.run(RunRequest())
     assert record.status == RunStatusEnum.done
     assert record.error is not None

@@ -288,36 +288,39 @@ ANIMATORY_FAKE_EXECUTORS=1 pytest tests/ -v
 
 ## Project Layout
 
+The backend is organized by **production domain** (parse → enrich → generate),
+with the agent framework as a separate runtime and shared leaves for the LLM
+client and GPU arbiter. Dependency direction is one-way:
+`llm, gpu ← parsing ← enrichment ← genimage/genvoice`; `runtime` and `studio`
+are independent; `server.py` mounts every domain router.
+
 ```
 animatory/
-  __init__.py
-  server.py          # FastAPI app + all routes
-  registry.py        # loads agent-framework.yaml -> AgentRegistry
-  models.py          # Pydantic models: AgentDef, RunRecord, RunRequest, etc.
-  base_agent.py      # BaseAgent — shared lifecycle (validate/run/accept/emit)
-  run_store.py       # SQLite run-record store (also InMemoryRunStore for tests)
-  cli.py             # argparse CLI
-  executors/
-    __init__.py
-    base.py          # AbstractExecutor interface
-    comfyui.py       # ComfyUI adaptor
-    llamacpp.py      # llama.cpp / llama-server adaptor
-    fake.py          # FakeExecutor — canned artifacts, no GPU needed
-  agents/
-    __init__.py      # placeholder for future custom agent subclasses
+  server.py            # FastAPI app factory + lifespan + router mounts
+  cli.py               # argparse CLI
+  pipeline_router.py   # /pipeline integration router (parse/scene/entity/chat routes)
+  llm/
+    qwen.py            # shared Qwen client: _call_qwen, _qwen_env
+  gpu/
+    brain.py           # shared GPU arbiter (hibernate LLM to free VRAM for Z-Image)
+  runtime/             # agent-framework engine
+    models.py  registry.py  base_agent.py  run_store.py
+    executors/         # base · comfyui · llamacpp · fake · zimage
+  parsing/             # transcript -> scenes
+    chunker.py  scene_parser.py  scene_source.py  entity_registry.py
+  enrichment/          # prepare data + the prompt before generation
+    entity_enrichment.py  voice_profiles.py  item_extractor.py
+    prompts.py         # compose_image_prompt — injects enriched descriptions
+  genimage/            # image-generation domain
+    imagegen/          # HTTP API, jobs, LoRA  (router mounted at /imagegen)
+    zimage/            # Z-Image engine, rig/shot model, batch runner
+  genvoice/            # voice-generation scaffold (contracts + stub router)
+  chat/
+    engine.py  store.py   # refine chat (streaming, tool-calling) + persistence
+  spellcheck/          # checker (llm.qwen) · dictionary · naming_pass · router · chunker
+  studio/              # producer 4-phase pipeline (models · router · store · seed)
 agent-framework.yaml
-workflows/
-  anim_block.json
-  anim_inbetween.json
-  anim_lipsync.json
-  rig_build.json
-fixtures/
-  animation_context.json
-  showrunner_context.json
-tests/
-  test_registry.py
-  test_base_agent.py
-  test_api.py
+workflows/  fixtures/  tests/
 ```
 
 ---

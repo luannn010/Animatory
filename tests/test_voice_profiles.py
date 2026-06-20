@@ -1,5 +1,5 @@
 # tests/test_voice_profiles.py
-from animatory.voice_profiles import aggregate
+from animatory.enrichment.voice_profiles import aggregate
 
 
 def test_aggregate_counts_emotions_per_character():

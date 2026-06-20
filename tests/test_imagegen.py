@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from animatory.imagegen.jobs import ImageJobStore
-from animatory.imagegen.lora import LoraNotFound, LoraRegistry
-from animatory.imagegen.presets import AssetType, apply_defaults, build_prompts
-from animatory.imagegen.schemas import GenerationRequest, LoraConfig
-from animatory.imagegen.service import run_job, run_train_job
+from animatory.genimage.imagegen.jobs import ImageJobStore
+from animatory.genimage.imagegen.lora import LoraNotFound, LoraRegistry
+from animatory.genimage.imagegen.presets import AssetType, apply_defaults, build_prompts
+from animatory.genimage.imagegen.schemas import GenerationRequest, LoraConfig
+from animatory.genimage.imagegen.service import run_job, run_train_job
 
 
 # -- fakes ------------------------------------------------------------------------------
@@ -340,7 +340,7 @@ async def test_run_train_job_failure(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_http_train_endpoint(client, tmp_path, monkeypatch):
     from animatory.server import app
-    import animatory.imagegen.router as r
+    import animatory.genimage.imagegen.router as r
 
     refs = tmp_path / "refs"
     refs.mkdir()

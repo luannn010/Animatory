@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from animatory import entity_registry as er
+from animatory.parsing import entity_registry as er
 
 
 def test_load_missing_returns_empty(tmp_path):

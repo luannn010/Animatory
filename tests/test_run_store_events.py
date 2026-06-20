@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from animatory.models import RunRecord
-from animatory.run_store import InMemoryRunStore
+from animatory.runtime.models import RunRecord
+from animatory.runtime.run_store import InMemoryRunStore
 
 
 @pytest.mark.asyncio
