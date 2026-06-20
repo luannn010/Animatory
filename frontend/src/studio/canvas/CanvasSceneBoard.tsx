@@ -39,8 +39,7 @@ function ShotCard({ projectId, scene, shot, ratio }: { projectId: string; scene:
         <div className="ppc-fld"><span className="ppc-fld__k">SFX</span><span className="ppc-fld__v is-mono">{shot.sfx}</span></div>
       </div>
       <div className="ppc-shot__foot">
-        {/* Rig Studio lands in Step 2 */}
-        <button className="ppc-shot__open" disabled title="Rig Studio — Step 2">Open Studio <Icon name="arrow-right" size={15} /></button>
+        <button className="ppc-shot__open" onClick={() => navigate(`/project/${projectId}/pre/canvas/${scene.id}/${shot.id}/studio`)}>Open Studio <Icon name="arrow-right" size={15} /></button>
         <span className="ppc-shot__dur ppc-mono">{shot.baked ? '● baked' : '○ no clip'}</span>
       </div>
     </div>

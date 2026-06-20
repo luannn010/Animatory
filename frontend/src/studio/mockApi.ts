@@ -120,13 +120,13 @@ function seedPostStages(projectId: string): PostStage[] {
 function seedDesignAssets(projectId: string): DesignAsset[] {
   const base: Omit<DesignAsset, 'id' | 'projectId' | 'candidates'>[] = [
     { kind: 'character', sourceEntity: 'Hana', displayName: 'Hana', promptText: 'young woman, red hair, determined', refImageUrl: null, stage: 'color', lockedRef: null },
-    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'bw_final', lockedRef: null },
+    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'color', lockedRef: null },
     { kind: 'location', sourceEntity: 'Apartment', displayName: 'Hana\'s Apartment', promptText: 'cramped city apartment, night, rain', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'location', sourceEntity: 'Office', displayName: 'Riku\'s Office', promptText: 'cluttered office, monitors glowing', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
     { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
   ]
-  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, bw_final: 3, color: 4, locked: 3 }
+  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, color: 4, locked: 3 }
   return base.map((a, i) => {
     const id = `${projectId}-da${i + 1}`
     const n = COUNT[a.stage]
@@ -198,12 +198,30 @@ function seedRig(assetId: string): RigDoc {
 
 // ── in-memory state ──────────────────────────────────────────────────────────
 
-let projects: Project[] = seedProjects()
-let newProjectCounter = 0
+// Created projects persist across reloads (so "the projects I created are there"
+// in the Script-phase dashboard) without needing the backend, which has a
+// different Project shape (phase enums / gates) and no /rigs route yet.
+const PROJECTS_KEY = 'animatory_studio_projects_v1'
+function loadProjects(): Project[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY)
+    if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length) return arr as Project[] }
+  } catch { /* ignore */ }
+  return seedProjects()
+}
+function saveProjects(): void {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)) } catch { /* ignore */ }
+}
+
+let projects: Project[] = loadProjects()
+let newProjectCounter = projects.reduce((m, p) => {
+  const x = /^new(\d+)$/.exec(p.id); return x ? Math.max(m, Number(x[1])) : m
+}, 0)
 let rigs: Record<string, RigDoc> = {}
 let canvasScenes: CanvasScene[] = seedCanvasScenes()
 
 export function __resetStudioState(): void {
+  try { localStorage.removeItem(PROJECTS_KEY) } catch { /* ignore */ }
   projects = seedProjects()
   newProjectCounter = 0
   rigs = {}
@@ -238,12 +256,14 @@ export const studioApi = {
       sceneCount: 0, createdAt: '2026-06-02T00:00:00Z',
     }
     projects = [project, ...projects]
+    saveProjects()
     return clone(project)
   },
 
   async updateProjectTitle(id: string, title: string): Promise<Project> {
     await delay(80)
     const p = find(id); p.title = title
+    saveProjects()
     return clone(p)
   },
 
@@ -255,6 +275,7 @@ export const studioApi = {
       p.gates[ph] = i < target ? 'passed' : i === target ? 'open' : 'locked'
     })
     p.phase = to
+    saveProjects()
     return clone(p)
   },
 

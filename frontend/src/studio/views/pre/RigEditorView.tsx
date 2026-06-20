@@ -12,6 +12,9 @@ import { RigStage, type DrawnBone } from '../../rig/RigStage'
 import { buildHumanoid } from '../../rig/humanoid'
 import { loadDesignAssets } from '../../entityAssets'
 import { Icon, type IconName } from '../../ui/Icon'
+import { deformApi, type RigAsset } from '../../deformApi'
+import { DeformWorkspace } from '../../DeformWorkspace'
+import { slug } from '../../entityAssets'
 
 const DEG = 180 / Math.PI
 const toDeg = (r: number) => Math.round(r * DEG)
@@ -23,7 +26,6 @@ const isDrawn = (id: string) => /^b\d+$/.test(id) // hand-drawn bones; the human
 const MODES: { id: RigMode; label: string; v2?: boolean }[] = [
   { id: 'rig', label: 'Rig' },
   { id: 'pose', label: 'Pose' },
-  { id: 'deform', label: 'Deform', v2: true },
 ]
 
 function depthOf(bones: Bone[], id: string): number {
@@ -93,6 +95,8 @@ export function RigEditorView() {
   const [drawing, setDrawing] = useState(false) // drag-to-draw tool (rig mode)
   const [loop, setLoop] = useState(true)
   const [charName, setCharName] = useState('')
+  const [deformChar, setDeformChar] = useState<RigAsset | null>(null)
+  const [showDeform, setShowDeform] = useState(false)  // deform lives on the canvas, toggled (not a mode tab)
   const [scrubbing, setScrubbing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -115,6 +119,20 @@ export function RigEditorView() {
       .catch(() => {})
     return () => { alive = false }
   }, [id, assetId])
+
+  // resolve the Z-Image render that backs this asset — drives Deform mode
+  useEffect(() => {
+    let alive = true
+    deformApi.listRigAssets()
+      .then(rows => {
+        if (!alive) return
+        const m = rows.find(r => slug(r.characterId || '') === assetId)
+          || (charName ? rows.find(r => (r.characterId || '').toLowerCase() === charName.toLowerCase()) : undefined)
+        setDeformChar(m ?? null)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [assetId, charName])
 
   // playback loop — advance the playhead; stop at the end unless looping
   useEffect(() => {
@@ -236,6 +254,7 @@ export function RigEditorView() {
           </ToolButton>
           <ToolButton icon="upload" onClick={importCharacter}>Import character</ToolButton>
           <ToolButton icon="x" onClick={clearBones} disabled={state.bones.length === 0}>Clear bones</ToolButton>
+          <ToolButton icon="layers" onClick={() => setShowDeform(d => !d)} active={showDeform}>{showDeform ? 'Deforming' : 'Deform'}</ToolButton>
           <span className="h-5 w-px bg-white/[0.13]" />
           <ToolButton icon="plus" primary onClick={() => dispatch({ type: 'addKeyframe' })} disabled={state.bones.length === 0}>Add keyframe</ToolButton>
           <input ref={fileRef} type="file" accept="application/json" className="hidden"
@@ -248,7 +267,19 @@ export function RigEditorView() {
 
       {error && <div className="flex-none border-b border-white/[0.07] bg-[#d45656]/10 px-5 py-2 text-xs text-[#e88981]">{error}</div>}
 
-      {/* BODY: hierarchy | stage | inspector */}
+      {/* BODY: hierarchy | stage | inspector — or the textured deform workspace on the canvas */}
+      {showDeform ? (
+        <div className="min-h-0 flex-1 overflow-auto bg-canvas p-5 text-ink">
+          {deformChar
+            ? <DeformWorkspace key={deformChar.jobId} character={deformChar} />
+            : (
+              <div className="mx-auto mt-10 max-w-md rounded-lg border border-hairline bg-canvas p-6 text-center">
+                <p className="text-sm font-medium text-ink">No generated art for this character</p>
+                <p className="mt-1 text-xs text-stone">Generate {charName || 'this character'} with Z-Image in the Design track, then deform it here.</p>
+              </div>
+            )}
+        </div>
+      ) : (
       <div className="grid min-h-0 flex-1 grid-cols-[252px_1fr_304px]">
         {/* hierarchy */}
         <aside className="flex min-h-0 flex-col border-r border-white/[0.07] bg-[#151a20]">
@@ -290,12 +321,7 @@ export function RigEditorView() {
         <aside className="flex min-h-0 flex-col border-l border-white/[0.07] bg-[#151a20]">
           <PaneHead eyebrow="Inspector" count={selected?.id} />
           <div className="min-h-0 flex-1 overflow-auto">
-            {state.mode === 'deform' ? (
-              <div className="m-6 rounded-md border border-dashed border-white/[0.13] p-4 text-center">
-                <span className="inline-block rounded bg-white/[0.05] px-2 py-0.5 font-mono text-[10px] text-[#59626d]">V2</span>
-                <p className="mt-2 text-xs text-[#59626d]">Mesh deformation &amp; weight painting land in v2. Bones stay rigid in v1 — nothing to deform here yet.</p>
-              </div>
-            ) : !selected ? (
+            {!selected ? (
               <p className="px-6 py-12 text-center text-sm text-[#59626d]">
                 {state.bones.length ? 'Select a bone from the hierarchy or stage to inspect it.' : 'No bones yet — draw one on the stage to begin.'}
               </p>
@@ -321,11 +347,6 @@ export function RigEditorView() {
                   <span className="font-mono text-[15px] font-semibold text-[#00d4a4]">{poseDelta > 0 ? '+' : ''}{poseDelta}°</span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border border-dashed border-white/[0.13] px-4 py-3 text-[#59626d] opacity-75">
-                  <span className="text-sm">Mesh — none</span>
-                  <span className="rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px]">V2</span>
-                </div>
-
                 {poseDelta !== 0 && (
                   <button onClick={() => dispatch({ type: 'resetPose' })}
                     className={`inline-flex items-center justify-center gap-1.5 rounded-md border border-white/[0.13] py-2 text-sm font-medium text-[#8a939d] transition-colors hover:bg-white/[0.05] hover:text-[#d4dbe2] ${RING}`}>
@@ -343,8 +364,10 @@ export function RigEditorView() {
           </div>
         </aside>
       </div>
+      )}
 
       {/* TIMELINE */}
+      {!showDeform && (
       <div className="flex-none border-t border-white/[0.07] bg-[#11161c] px-7 py-5">
         <div className="mb-5 flex items-center gap-5">
           <button onClick={playToggle} disabled={!canPlay} aria-label={state.playing ? 'Pause' : 'Play'}
@@ -399,6 +422,7 @@ export function RigEditorView() {
           {!canPlay && <p className="mt-2 text-[11px] text-[#59626d]">Capture at least two keyframes to play a tween.</p>}
         </div>
       </div>
+      )}
     </div>
   )
 }

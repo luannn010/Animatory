@@ -25,8 +25,7 @@ function ShotDetailBody({ projectId, scene, shot }: { projectId: string; scene: 
           <b>{sceneNo}</b><span className="ppc-crumb__sep">/</span><b>{shotNo}</b>
         </div>
         <span className="ppc-board__spacer" />
-        {/* Rig Studio lands in Step 2 */}
-        <button className="ppc-btn is-primary" disabled title="Rig Studio — Step 2">Open Studio <Icon name="arrow-right" size={16} /></button>
+        <button className="ppc-btn is-primary" onClick={() => navigate(`/project/${projectId}/pre/canvas/${scene.id}/${shot.id}/studio`)}>Open Studio <Icon name="arrow-right" size={16} /></button>
       </div>
 
       <div className="ppc-shotview__body">
