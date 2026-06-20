@@ -203,6 +203,7 @@ async def enrich_entities(
     qwen: dict | None = None,
     force: bool = False,
     on_entity: Callable[[str, dict], Awaitable[None]] | None = None,
+    only: set[str] | None = None,
 ) -> er.EntityRegistry:
     """Locations → Characters → Voices. Fills structured description + voice
     blocks on the registry, grounded in scene evidence. One bad entity is logged
@@ -210,7 +211,12 @@ async def enrich_entities(
 
     If ``on_entity`` is given it is awaited as ``(kind, entry)`` after each entity
     is merged (``kind`` is ``"locations"`` or ``"characters"``, ``entry`` is the
-    merged registry dict) — used to stream descriptions to the UI as they land."""
+    merged registry dict) — used to stream descriptions to the UI as they land.
+
+    If ``only`` is given (a set of match keys, ``er._key(name)``), every entity
+    whose key is not in the set is skipped entirely — no LLM call, no merge, no
+    emit. Evidence is still built from all scenes, so a single targeted entity
+    still sees all its appearances. ``None`` (the default) enriches everything."""
     call_fn = call_fn or _default_call_fn()
     qwen = qwen or {}
     index = build_appearance_index(scenes)
@@ -225,6 +231,8 @@ async def enrich_entities(
 
     # Phase: Locations
     for loc in index["locations"]:
+        if only is not None and loc["key"] not in only:
+            continue
         if not loc["evidence"]:
             registry.merge_descriptions("locations", loc["name"], appears_in=loc["appears_in"])
             await _emit("locations", loc["name"])
@@ -251,6 +259,8 @@ async def enrich_entities(
 
     # Phase: Characters (+ Voices)
     for ch in index["characters"]:
+        if only is not None and ch["key"] not in only:
+            continue
         stats = voice_stats.get(ch["key"], {})
         voice_stat_block = {
             "dominant_emotion": stats.get("dominant_emotion") or "",
