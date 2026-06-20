@@ -17,6 +17,14 @@ dependencies = [
     "sse-starlette>=2.1.0",
     "python-multipart>=0.0.9",
     "python-dotenv>=1.0.0",
+    # Mesh-deform geometry stack (animatory/deform). All ship Windows wheels — no
+    # C build step (we use scipy.spatial.Delaunay + a centroid-in-polygon filter
+    # rather than the `triangle` C extension; see the mesh-deform spec, R4).
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-image>=0.22",
+    "shapely>=2.0",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]

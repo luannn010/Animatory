@@ -1,9 +1,11 @@
 import type {
   Project, Scene, Asset, VendorScene, PostStage, Phase, GateStatus,
   TrackId, TrackProgress, DesignAsset, GenCandidate, StoryboardPanel, VoiceCast, VoiceOption,
-  DialogueClip, Animatic, Bone, RigDoc,
+  DialogueClip, Animatic, RigDoc,
 } from './types'
 import { PHASE_ORDER, PRE_TRACKS } from './phases'
+import { buildHumanoid } from './rig/humanoid'
+import { seedCanvasScenes, type CanvasScene } from './canvas/canvasData'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,13 +120,13 @@ function seedPostStages(projectId: string): PostStage[] {
 function seedDesignAssets(projectId: string): DesignAsset[] {
   const base: Omit<DesignAsset, 'id' | 'projectId' | 'candidates'>[] = [
     { kind: 'character', sourceEntity: 'Hana', displayName: 'Hana', promptText: 'young woman, red hair, determined', refImageUrl: null, stage: 'color', lockedRef: null },
-    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'bw_final', lockedRef: null },
+    { kind: 'character', sourceEntity: 'Riku', displayName: 'Riku', promptText: 'man, dark coat, weary eyes', refImageUrl: null, stage: 'color', lockedRef: null },
     { kind: 'location', sourceEntity: 'Apartment', displayName: 'Hana\'s Apartment', promptText: 'cramped city apartment, night, rain', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'location', sourceEntity: 'Office', displayName: 'Riku\'s Office', promptText: 'cluttered office, monitors glowing', refImageUrl: null, stage: 'rough', lockedRef: null },
     { kind: 'prop', sourceEntity: 'Umbrella', displayName: 'Inverted Umbrella', promptText: 'black umbrella, wind-bent', refImageUrl: null, stage: 'locked', lockedRef: 'umbrella_locked.png' },
     { kind: 'prop', sourceEntity: 'Phone', displayName: 'Cracked Phone', promptText: 'smartphone, cracked screen, weather alert', refImageUrl: null, stage: 'color', lockedRef: null },
   ]
-  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, bw_final: 3, color: 4, locked: 3 }
+  const COUNT: Record<DesignAsset['stage'], number> = { rough: 0, color: 4, locked: 3 }
   return base.map((a, i) => {
     const id = `${projectId}-da${i + 1}`
     const n = COUNT[a.stage]
@@ -183,33 +185,47 @@ function seedAnimatic(projectId: string): Animatic {
   }
 }
 
-// A small demo skeleton so the rig editor isn't empty before art import: a spine
-// up from the canvas, a neck, and one arm. Children's x/y are ignored (their
-// pivot is the parent's tip); only the root's position is meaningful.
+// A fresh character rig opens on the default humanoid skeleton (+ skin
+// silhouette), matching the design's initial state. "Clear bones" empties it and
+// "Import character" reloads it.
 function seedRig(assetId: string): RigDoc {
-  const b = (id: string, name: string, parent: string | null, x: number, y: number, len: number, angle: number): Bone =>
-    ({ id, name, parent, x, y, len, angle, mesh: null })
   return {
     schema: 'animatory.rig/v1', assetId,
-    skeleton: [
-      b('b1', 'spine', null, 260, 320, 90, -Math.PI / 2),
-      b('b2', 'neck', 'b1', 0, 0, 40, -Math.PI / 2),
-      b('b3', 'arm_L', 'b1', 0, 0, 70, -Math.PI / 4),
-    ],
+    skeleton: buildHumanoid(),
     clips: [{ name: 'action_01', duration_s: 1, keyframes: [] }],
   }
 }
 
 // ── in-memory state ──────────────────────────────────────────────────────────
 
-let projects: Project[] = seedProjects()
-let newProjectCounter = 0
+// Created projects persist across reloads (so "the projects I created are there"
+// in the Script-phase dashboard) without needing the backend, which has a
+// different Project shape (phase enums / gates) and no /rigs route yet.
+const PROJECTS_KEY = 'animatory_studio_projects_v1'
+function loadProjects(): Project[] {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY)
+    if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length) return arr as Project[] }
+  } catch { /* ignore */ }
+  return seedProjects()
+}
+function saveProjects(): void {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)) } catch { /* ignore */ }
+}
+
+let projects: Project[] = loadProjects()
+let newProjectCounter = projects.reduce((m, p) => {
+  const x = /^new(\d+)$/.exec(p.id); return x ? Math.max(m, Number(x[1])) : m
+}, 0)
 let rigs: Record<string, RigDoc> = {}
+let canvasScenes: CanvasScene[] = seedCanvasScenes()
 
 export function __resetStudioState(): void {
+  try { localStorage.removeItem(PROJECTS_KEY) } catch { /* ignore */ }
   projects = seedProjects()
   newProjectCounter = 0
   rigs = {}
+  canvasScenes = seedCanvasScenes()
 }
 
 function find(id: string): Project {
@@ -240,12 +256,14 @@ export const studioApi = {
       sceneCount: 0, createdAt: '2026-06-02T00:00:00Z',
     }
     projects = [project, ...projects]
+    saveProjects()
     return clone(project)
   },
 
   async updateProjectTitle(id: string, title: string): Promise<Project> {
     await delay(80)
     const p = find(id); p.title = title
+    saveProjects()
     return clone(p)
   },
 
@@ -257,6 +275,7 @@ export const studioApi = {
       p.gates[ph] = i < target ? 'passed' : i === target ? 'open' : 'locked'
     })
     p.phase = to
+    saveProjects()
     return clone(p)
   },
 
@@ -291,6 +310,9 @@ export const studioApi = {
   },
   async getAnimatic(projectId: string): Promise<Animatic> {
     await delay(); find(projectId); return seedAnimatic(projectId)
+  },
+  async getCanvasScenes(projectId: string): Promise<CanvasScene[]> {
+    await delay(); find(projectId); return clone(canvasScenes)
   },
 
   // ── Rig editor (bones-only v1) ─────────────────────────────────────────────

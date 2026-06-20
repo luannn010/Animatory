@@ -2,10 +2,11 @@ import { NavLink } from 'react-router-dom'
 import type { Project, TrackId } from '../types'
 import { preTrackPath } from '../phases'
 
-const TABS: { id: TrackId | 'animatic' | 'checking'; label: string }[] = [
+// Redesign tab bar: the Canvas track folds shot-boarding + dialogue in, so
+// Storyboard/Audio leave the bar (their routes/views stay reachable by URL).
+const TABS: { id: TrackId | 'canvas' | 'animatic' | 'checking'; label: string }[] = [
   { id: 'design', label: 'Design' },
-  { id: 'storyboard', label: 'Storyboard' },
-  { id: 'audio', label: 'Audio' },
+  { id: 'canvas', label: 'Canvas' },
   { id: 'animatic', label: 'Animatic' },
   { id: 'checking', label: 'Checking' },
 ]
@@ -16,11 +17,11 @@ const DOT: Record<'idle' | 'active' | 'ready', string> = {
   ready: 'bg-[#00b48a]',
 }
 
-interface Props { project: Project }
+interface Props { project: Project; flush?: boolean }
 
-export function TrackTabs({ project }: Props) {
+export function TrackTabs({ project, flush = false }: Props) {
   return (
-    <nav className="flex items-center gap-1 border-b border-hairline mb-6">
+    <nav className={`flex items-center gap-1 border-b border-hairline ${flush ? '' : 'mb-6'}`}>
       {TABS.map(tab => {
         // Only the three parallel tracks carry a readiness dot; animatic/checking
         // are derived steps without their own TrackProgress.
