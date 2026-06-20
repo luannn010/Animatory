@@ -135,6 +135,37 @@ def cmd_chunk(args: argparse.Namespace) -> None:
         ))
 
 
+def cmd_prompts(args: argparse.Namespace) -> None:
+    from datetime import datetime, timezone
+    from animatory.parsing import entity_registry
+    from animatory.enrichment import prompt_compiler, visual_inference
+    from animatory.llm.qwen import _qwen_env
+
+    episode_dir = pathlib.Path(args.episode_dir)
+    if not episode_dir.exists():
+        print(f"Error: episode dir not found: {episode_dir}", file=sys.stderr)
+        sys.exit(1)
+    episode_id = episode_dir.name
+
+    if args.infer:
+        endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(args.qwen_endpoint)
+        qwen = dict(
+            endpoint=endpoint, model_name=model_name, retries=retries,
+            timeout_s=timeout_s, enable_thinking=enable_thinking,
+        )
+        registry = entity_registry.load(episode_id, episode_dir)
+        asyncio.run(visual_inference.infer_visuals(
+            registry, qwen=qwen, force=args.force, episode_dir=episode_dir,
+        ))
+        entity_registry.save(
+            registry, episode_dir, now=datetime.now(timezone.utc).isoformat(),
+        )
+
+    char_path, loc_path = prompt_compiler.compile_episode(episode_id, episode_dir)
+    print(f"Character prompts: {char_path}")
+    print(f"Location prompts : {loc_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="animatory.cli", description="Animatory CLI")
     sub = parser.add_subparsers(dest="command")
@@ -157,6 +188,14 @@ def main() -> None:
     chunk_p.add_argument("--parse", action="store_true", help="Also run scene parser after chunking")
     chunk_p.add_argument("--qwen-endpoint", default="http://localhost:1090")
 
+    prompts_p = sub.add_parser("prompts", help="Generate Z-Image prompts for an episode")
+    prompts_p.add_argument("episode_dir", metavar="<processed/EPISODE_DIR>")
+    prompts_p.add_argument("--infer", action="store_true",
+                           help="Run free visual inference before compiling")
+    prompts_p.add_argument("--force", action="store_true",
+                           help="Overwrite existing visual fields during inference")
+    prompts_p.add_argument("--qwen-endpoint", default="http://localhost:1090")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -165,6 +204,8 @@ def main() -> None:
         cmd_list(args)
     elif args.command == "chunk":
         cmd_chunk(args)
+    elif args.command == "prompts":
+        cmd_prompts(args)
     else:
         parser.print_help()
         sys.exit(1)

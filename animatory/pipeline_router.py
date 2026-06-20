@@ -19,6 +19,7 @@ from animatory.parsing.scene_parser import ChatUnavailableError, parse_episode, 
 from animatory.chat.engine import stream_chat, generate_title
 from animatory.enrichment.voice_profiles import aggregate
 from animatory.enrichment.entity_enrichment import enrich_entities
+from animatory.enrichment import prompt_compiler, visual_inference
 from animatory.llm.qwen import _call_qwen, _qwen_env
 from sse_starlette.sse import EventSourceResponse
 
@@ -603,6 +604,82 @@ async def enrich_episode_entities(
 
     asyncio.create_task(_run())
     return {"run_id": run_id}
+
+
+@router.post("/episodes/{episode_id}/infer-visuals")
+async def infer_visuals(episode_id: str, request: Request):
+    """Run free visual inference (Layer 2′) over the episode's entities and persist
+    the ``visual`` blocks. Returns a run_id immediately; stream progress via
+    ``GET /runs/{run_id}/stream`` — per-entity ``visual_inferred`` events land as the
+    designs are synthesized (mirrors the ``entity_described`` events of parsing)."""
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+
+    store = request.app.state.store
+    run_id = str(uuid.uuid4())
+    record = RunRecord(
+        run_id=run_id,
+        agent_id=f"pipeline.infer-visuals.{episode_id}",
+        status=RunStatusEnum.queued,
+        started_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    await store.create(record)
+    logger.info("[infer-visuals] run=%s episode=%s queued", run_id, episode_id)
+
+    async def _emit_event(ev_type: str, payload: dict):
+        rec = await store.get(run_id)
+        await store.update(run_id, events=(rec.events or []) + [{"type": ev_type, "payload": payload}])
+
+    async def _on_entity(kind: str, entry: dict):
+        singular = "character" if kind == "characters" else "location"
+        await _emit_event("visual_inferred", {"kind": singular, "entry": entry})
+
+    async def _run():
+        logger.info("[infer-visuals] run=%s episode=%s started", run_id, episode_id)
+        await store.update(run_id, status=RunStatusEnum.running)
+        try:
+            endpoint, model_name, retries, timeout_s, enable_thinking = _qwen_env(None)
+            qwen = dict(
+                endpoint=endpoint, model_name=model_name, retries=retries,
+                timeout_s=timeout_s, enable_thinking=enable_thinking,
+            )
+            registry = entity_registry.load(episode_id, ep_dir)
+            await visual_inference.infer_visuals(
+                registry, qwen=qwen, episode_dir=ep_dir, on_entity=_on_entity,
+            )
+            entity_registry.save(registry, ep_dir, now=_now())
+            logger.info("[infer-visuals] run=%s episode=%s done", run_id, episode_id)
+            await store.update(
+                run_id,
+                status=RunStatusEnum.done,
+                finished_at=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception as exc:
+            logger.exception("[infer-visuals] run=%s episode=%s FAILED: %s", run_id, episode_id, exc)
+            await store.update(
+                run_id,
+                status=RunStatusEnum.failed,
+                finished_at=datetime.datetime.now(datetime.timezone.utc),
+                error=str(exc),
+            )
+
+    asyncio.create_task(_run())
+    return {"run_id": run_id}
+
+
+@router.get("/episodes/{episode_id}/character-prompts")
+async def get_character_prompts(episode_id: str):
+    """Compile (or recompile) the Z-Image prompt files for an episode and return
+    both documents. Idempotent — safe to call repeatedly."""
+    ep_dir = _processed_dir() / episode_id
+    if not (ep_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail=f"Episode '{episode_id}' not found or not chunked yet")
+    char_path, loc_path = prompt_compiler.compile_episode(episode_id, ep_dir)
+    return {
+        "character_prompts": json.loads(char_path.read_text(encoding="utf-8")),
+        "location_prompts": json.loads(loc_path.read_text(encoding="utf-8")),
+    }
 
 
 @router.get("/episodes/{episode_id}/chunks/{chunk_id}/text")
