@@ -1,5 +1,16 @@
 # Animatory — CLAUDE.md
 
+## Worktree workflow (git) — required
+
+- **Before creating a new git worktree**, update the base first: run `git fetch
+  origin` and ensure the new worktree branches off the latest **`origin/master`**
+  (never off a stale local `master`).
+- **When all tasks for a request are finished and verified** (tests green) **while
+  working in a worktree**, do not end the turn silently — proactively **ask the user
+  whether to commit, push, and open a PR**. Only commit / push / create the PR after
+  the user confirms. Match the established flow: feature branch → commit → push → PR
+  to `master`.
+
 ## Design Authority & UI Taste (read before any UI work)
 
 **The design specs are the source of truth.** Before building or changing any

@@ -1,0 +1,41 @@
+name: Auto-merge
+
+# When the CI workflow finishes successfully for a pull request, squash-merge that
+# PR automatically. workflow_run executes the copy of this file on the DEFAULT
+# branch, so this only takes effect once it is on master.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    # Only act when CI passed and the run was for a pull request.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Squash-merge the green PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          # Match the open PR whose CURRENT head is exactly the commit that passed CI,
+          # so a PR that got new commits after CI started is not merged on stale green.
+          pr=$(gh pr list --repo "$REPO" --state open --head "$HEAD_BRANCH" \
+                 --json number,headRefOid \
+                 --jq ".[] | select(.headRefOid==\"$HEAD_SHA\") | .number" | head -n1)
+          if [ -z "$pr" ]; then
+            echo "No open PR for $HEAD_BRANCH @ $HEAD_SHA — nothing to merge."
+            exit 0
+          fi
+          echo "CI green — squash-merging PR #$pr"
+          gh pr merge "$pr" --squash --delete-branch --repo "$REPO"
