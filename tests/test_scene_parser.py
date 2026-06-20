@@ -153,7 +153,7 @@ async def test_parse_episode_runs_enrichment_after_chunks(tmp_path, monkeypatch)
         p.write_text(json.dumps({"chunk_id": chunk_id, "scenes": [scene]}, ensure_ascii=False), encoding="utf-8")
         return p
 
-    async def fake_enrich(reg, scenes, *, call_fn, qwen, force=False, on_entity=None):
+    async def fake_enrich(reg, scenes, *, call_fn, qwen, force=False, on_entity=None, **_kw):
         reg.merge_descriptions("characters", "Từ An", description={"summary": "a censor"})
         return reg
 

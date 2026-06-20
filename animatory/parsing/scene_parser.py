@@ -810,12 +810,14 @@ async def _enrich_episode(
             singular = "character" if kind == "characters" else "location"
             await on_event("entity_described", {"kind": singular, "entry": entry})
 
+    enrich_stats: dict = {}
     await entity_enrichment.enrich_entities(
-        registry, all_scenes, call_fn=_call_qwen, qwen=qwen, on_entity=_on_entity,
+        registry, all_scenes, call_fn=_call_qwen, qwen=qwen, on_entity=_on_entity, stats=enrich_stats,
     )
     entity_registry.save(registry, episode_dir, now=datetime.now(timezone.utc).isoformat())
-    logger.info("[enrich] episode=%s described %d character(s), %d location(s)",
-                episode_id, len(registry.characters), len(registry.locations))
+    logger.info("[enrich] episode=%s described %d character(s), %d location(s) (llm ok=%d failed=%d)",
+                episode_id, len(registry.characters), len(registry.locations),
+                enrich_stats.get("ok", 0), enrich_stats.get("failed", 0))
 
     # Descriptive Scenes: a grounded one-line summary per scene, written back.
     if on_progress is not None:
