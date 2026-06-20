@@ -670,6 +670,109 @@ def _qwen_resp(content: str):
     return m
 
 
+async def _write_scenes(ep_dir, cid):
+    """Two characters (one with dialogue) + a location, as a completed parse."""
+    doc = {"chunk_id": cid, "scenes": [{
+        "scene_id": f"{cid}_S01", "location": "Phòng", "characters": ["Từ An", "Lan Nhi"],
+        "shot_type": "wide", "action": "Từ An đứng ở cửa.", "narration": [], "mood": "tense",
+        "dialogue": [{"character": "Từ An", "line": "Chào.", "emotion": "angry", "intensity": "high"}],
+    }]}
+    (ep_dir / f"{cid}_scenes.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+
+
+_ENRICH_QWEN_JSON = json.dumps({
+    "summary": "sum", "setting": "silk drapes", "lighting": "dim", "time_variants": ["night"],
+    "description": {"summary": "a censor", "appearance": "lean", "attire": "robes",
+                    "age_build": "young", "palette": "black"},
+    "voice": {"register": "low", "tone": "dry", "pace": "measured"},
+})
+
+
+def _patch_qwen():
+    """Patch the shared Qwen httpx client to return _ENRICH_QWEN_JSON for every call."""
+    mc = patch("animatory.llm.qwen.httpx.AsyncClient")
+    MockClient = mc.start()
+    instance = AsyncMock()
+    instance.__aenter__ = AsyncMock(return_value=instance)
+    instance.__aexit__ = AsyncMock(return_value=False)
+    instance.post = AsyncMock(return_value=_qwen_resp(_ENRICH_QWEN_JSON))
+    MockClient.return_value = instance
+    return mc
+
+
+async def _drain_background():
+    import asyncio
+    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    if pending:
+        await asyncio.wait(pending, timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_enrich_route_fills_descriptions_for_all_entities(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="enr1")
+    ep_dir = tmp_path / ep
+    cid = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))["chunks"][0]["chunk_id"]
+    await _write_scenes(ep_dir, cid)
+
+    mc = _patch_qwen()
+    try:
+        r = await client.post(f"/pipeline/episodes/{ep}/enrich")
+        assert r.status_code == 200
+        run_id = r.json()["run_id"]
+        await _drain_background()
+    finally:
+        mc.stop()
+
+    run = (await client.get(f"/runs/{run_id}")).json()
+    assert run["status"] == "done"
+
+    got = (await client.get(f"/pipeline/episodes/{ep}/entities")).json()
+    char = next(c for c in got["characters"] if c["canonical"] == "Từ An")
+    assert char["description"]["appearance"] == "lean"
+    assert char["voice"]["register"] == "low"
+    assert char["voice"]["dominant_emotion"] == "angry"   # objective stat from aggregate()
+    loc = next(l for l in got["locations"] if l["canonical"] == "Phòng")
+    assert loc["description"]["setting"] == "silk drapes"
+
+
+@pytest.mark.asyncio
+async def test_enrich_route_scopes_to_one_entity(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="enr2")
+    ep_dir = tmp_path / ep
+    cid = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))["chunks"][0]["chunk_id"]
+    await _write_scenes(ep_dir, cid)
+
+    mc = _patch_qwen()
+    try:
+        r = await client.post(f"/pipeline/episodes/{ep}/enrich", json={"canonical": "Từ An"})
+        assert r.status_code == 200
+        await _drain_background()
+    finally:
+        mc.stop()
+
+    got = (await client.get(f"/pipeline/episodes/{ep}/entities")).json()
+    char = next(c for c in got["characters"] if c["canonical"] == "Từ An")
+    assert char["description"]["appearance"] == "lean"          # target enriched
+    other = next(c for c in got["characters"] if c["canonical"] == "Lan Nhi")
+    assert (other.get("description") or {}).get("appearance", "") == ""   # untouched
+    loc = next(l for l in got["locations"] if l["canonical"] == "Phòng")
+    assert (loc.get("description") or {}).get("setting", "") == ""        # untouched
+
+
+@pytest.mark.asyncio
+async def test_enrich_route_409_when_no_scenes(client, tmp_path, monkeypatch):
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="enr3")  # chunked, never parsed
+    r = await client.post(f"/pipeline/episodes/{ep}/enrich")
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_enrich_route_404_unknown_episode(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("ANIMATORY_PROCESSED_DIR", str(tmp_path))
+    r = await client.post("/pipeline/episodes/nope/enrich")
+    assert r.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
     ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rptest")

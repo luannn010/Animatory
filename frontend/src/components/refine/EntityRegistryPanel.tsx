@@ -1,10 +1,13 @@
 // frontend/src/components/refine/EntityRegistryPanel.tsx
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  getEntities, saveEntities,
+  getEntities, saveEntities, enrichEntities,
   type CharacterDescription, type CharacterVoice, type EntityEntry,
   type EntityRegistry, type LocationDescription,
 } from '../../api/pipeline'
+import { streamRun } from '../../api/client'
+import type { RunEvent } from '../../types'
+import { applyEnrichEvent } from './enrichStream'
 import { parseAliases, formatAliases } from './entities'
 
 const ctrl = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3772cf]'
@@ -52,6 +55,15 @@ function Labeled({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+function SparkIcon({ className = '' }: { className?: string }) {
+  // The one icon source for the enrich actions — a single sparkle glyph, no emoji.
+  return (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 ${className}`} fill="currentColor" aria-hidden="true">
+      <path d="M8 1.5l1.6 4.9 4.9 1.6-4.9 1.6L8 14.5l-1.6-4.9L1.5 8l4.9-1.6z" />
+    </svg>
+  )
+}
+
 export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: Props) {
   const [reg, setReg] = useState<EntityRegistry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,6 +71,9 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [open, setOpen] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)                       // an enrich run is in flight
+  const [busyOne, setBusyOne] = useState<string | null>(null)   // which entity (null = "all")
+  const enrichEsRef = useRef<ReturnType<typeof streamRun> | null>(null)
 
   const streaming = !!liveStream?.active
 
@@ -72,6 +87,9 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [episodeId, refreshKey, streaming])
+
+  // Close any open enrich SSE stream on unmount.
+  useEffect(() => () => enrichEsRef.current?.close(), [])
 
   if (streaming && liveStream) {
     return (
@@ -153,6 +171,34 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
     finally { setSaving(false) }
   }
 
+  // On-demand enrichment: reuse the parse run/SSE machinery. Empty fields fill live
+  // as entity_described events arrive; on completion we refetch the saved registry.
+  // `canonical` scopes to one entity; null enriches every character + location.
+  function runEnrich(canonical: string | null) {
+    if (busy || dirty || !reg) return
+    setError(''); setBusy(true); setBusyOne(canonical)
+    enrichEntities(episodeId, canonical ? { canonical } : {})
+      .then(({ run_id }) => {
+        const es = streamRun(run_id)
+        enrichEsRef.current = es
+        const finish = () => { es.close(); enrichEsRef.current = null; setBusy(false); setBusyOne(null) }
+        es.addEventListener('message', (raw: Event) => {
+          let event: RunEvent
+          try { event = JSON.parse((raw as MessageEvent).data as string) as RunEvent }
+          catch { return }
+          if (event.type === 'entity_described') {
+            setReg(r => (r ? applyEnrichEvent(r, event) : r))
+          } else if (event.type === 'complete') {
+            finish()
+            getEntities(episodeId).then(r => { setReg(r); setDirty(false) }).catch(e => setError(String(e)))
+          } else if (event.type === 'status' && event.data?.status === 'failed') {
+            finish(); setError('Enrichment failed — see server logs.')
+          }
+        })
+      })
+      .catch(e => { setError(String(e)); setBusy(false); setBusyOne(null) })
+  }
+
   function renderEntry(kind: Kind, e: EntityEntry, i: number) {
     const key = `${kind}:${i}`
     const expanded = open.has(key)
@@ -172,6 +218,12 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
           <input className={field} value={formatAliases(e.aliases)}
             onChange={ev => edit(kind, i, { aliases: parseAliases(ev.target.value) })}
             placeholder="Aliases (comma-separated)" />
+          <button onClick={() => runEnrich(e.canonical)} disabled={busy || dirty}
+            aria-label={`Enrich ${e.canonical || 'entry'} from transcript`}
+            title={dirty ? 'Save your edits before enriching' : 'Enrich from transcript'}
+            className={`shrink-0 w-6 grid place-items-center text-stone hover:text-[#3772cf] rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${ctrl}`}>
+            <SparkIcon className={busyOne === e.canonical ? 'animate-pulse' : ''} />
+          </button>
           <button onClick={() => remove(kind, i)} aria-label="Remove entry"
             className={`shrink-0 text-stone hover:text-brand-error px-1 rounded-md transition-colors ${ctrl}`}>×</button>
         </div>
@@ -240,10 +292,19 @@ export function EntityRegistryPanel({ episodeId, refreshKey = 0, liveStream }: P
     <div className="rounded-lg border border-hairline bg-canvas p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-ink">Names &amp; locations</h3>
-        <button onClick={save} disabled={!dirty || saving || !reg}
-          className={`px-3 py-1.5 rounded-md bg-[#3772cf] text-white text-xs font-medium hover:bg-[#2c5cab] disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${ctrl}`}>
-          {saving ? 'Saving…' : dirty ? 'Save ●' : 'Saved'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => runEnrich(null)}
+            disabled={busy || dirty || !reg || (reg.characters.length === 0 && reg.locations.length === 0)}
+            title={dirty ? 'Save your edits before enriching' : 'Fill empty description fields from the transcript'}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-hairline text-steel text-xs font-medium hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${ctrl}`}>
+            <SparkIcon className={busy && busyOne === null ? 'animate-pulse' : ''} />
+            {busy && busyOne === null ? 'Enriching…' : 'Enrich all'}
+          </button>
+          <button onClick={save} disabled={!dirty || saving || !reg}
+            className={`px-3 py-1.5 rounded-md bg-[#3772cf] text-white text-xs font-medium hover:bg-[#2c5cab] disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${ctrl}`}>
+            {saving ? 'Saving…' : dirty ? 'Save ●' : 'Saved'}
+          </button>
+        </div>
       </div>
 
       {loading ? (

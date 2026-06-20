@@ -298,6 +298,21 @@ export async function getVoiceProfiles(episodeId: string): Promise<VoiceProfiles
   return jsonOrThrow<VoiceProfilesResult>(res, 'getVoiceProfiles')
 }
 
+export async function enrichEntities(
+  episodeId: string,
+  body: { canonical?: string; force?: boolean } = {},
+): Promise<ParseResult> {
+  // Reuses the parse run/SSE machinery: returns a run_id; drive it via streamRun and
+  // fold the streamed entity_described events into the panel (see enrichStream.ts).
+  // Omit `canonical` to enrich the whole episode; pass one to scope to a single entity.
+  const res = await fetch(`${episodeBase(episodeId)}/enrich`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return jsonOrThrow<ParseResult>(res, 'enrichEntities')
+}
+
 export async function reparseScene(
   episodeId: string, chunkId: string, sceneId: string,
 ): Promise<{ scene: PipelineScene }> {
