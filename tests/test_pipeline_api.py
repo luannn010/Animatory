@@ -774,6 +774,37 @@ async def test_enrich_route_404_unknown_episode(client, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_enrich_route_fails_run_when_llm_unreachable(client, tmp_path, monkeypatch):
+    """When every LLM call fails (Qwen down), the run must report failed — not
+    silently 'done' with empty fields, which is the bug the user hit."""
+    import httpx as _httpx
+    monkeypatch.setenv("QWEN_MAX_RETRIES", "1")  # one attempt, no backoff sleep
+    ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="enrdown")
+    ep_dir = tmp_path / ep
+    cid = json.loads((ep_dir / "manifest.json").read_text(encoding="utf-8"))["chunks"][0]["chunk_id"]
+    await _write_scenes(ep_dir, cid)
+
+    mc = patch("animatory.llm.qwen.httpx.AsyncClient")
+    MockClient = mc.start()
+    try:
+        instance = AsyncMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=False)
+        instance.post = AsyncMock(side_effect=_httpx.ConnectError("down"))
+        MockClient.return_value = instance
+        r = await client.post(f"/pipeline/episodes/{ep}/enrich")
+        assert r.status_code == 200
+        run_id = r.json()["run_id"]
+        await _drain_background()
+    finally:
+        mc.stop()
+
+    run = (await client.get(f"/runs/{run_id}")).json()
+    assert run["status"] == "failed"
+    assert "unreachable" in (run.get("error") or "").lower()
+
+
+@pytest.mark.asyncio
 async def test_reparse_route_returns_scene(client, tmp_path, monkeypatch):
     ep = await _chunk_episode(client, tmp_path, monkeypatch, ep="rptest")
     import json as _json

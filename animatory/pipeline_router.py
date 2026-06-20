@@ -580,17 +580,30 @@ async def enrich_episode_entities(
             registry.learn(scenes)  # idempotent — ensures names exist if entities.json is stale
             # Voices are a pure aggregate (no LLM); emit first so the panel matches a parse run.
             await _emit_event("voice_profiles", {"profiles": aggregate(scenes)})
+            enrich_stats: dict = {}
             await enrich_entities(
                 registry, scenes, call_fn=_call_qwen, qwen=qwen,
-                force=body.force, on_entity=_on_entity, only=only,
+                force=body.force, on_entity=_on_entity, only=only, stats=enrich_stats,
             )
             entity_registry.save(registry, ep_dir, now=_now())
-            logger.info("[enrich] run=%s episode=%s done", run_id, episode_id)
+            ok, failed = enrich_stats.get("ok", 0), enrich_stats.get("failed", 0)
+            if ok == 0 and failed > 0:
+                # Every LLM call failed — almost always Qwen unreachable. Surface it
+                # instead of reporting success with empty fields (the silent-fail bug).
+                msg = f"enrichment LLM unreachable: all {failed} call(s) failed"
+                logger.warning("[enrich] run=%s episode=%s %s", run_id, episode_id, msg)
+                await store.update(
+                    run_id, status=RunStatusEnum.failed,
+                    finished_at=datetime.datetime.now(datetime.timezone.utc), error=msg,
+                )
+                return
+            logger.info("[enrich] run=%s episode=%s done (ok=%d failed=%d)", run_id, episode_id, ok, failed)
             await store.update(
                 run_id,
                 status=RunStatusEnum.done,
                 finished_at=datetime.datetime.now(datetime.timezone.utc),
-                logs=[f"Enriched {episode_id}" + (f" ({body.canonical})" if body.canonical else "")],
+                logs=[f"Enriched {episode_id}: {ok} ok, {failed} failed"
+                      + (f" ({body.canonical})" if body.canonical else "")],
             )
         except Exception as exc:
             logger.exception("[enrich] run=%s episode=%s FAILED: %s", run_id, episode_id, exc)

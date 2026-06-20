@@ -66,6 +66,21 @@ def test_appearance_index_locations_and_skips_unknown():
     assert "Unknown" not in {c["name"] for c in idx["characters"]}
 
 
+def test_character_evidence_includes_narration():
+    """Narration is where a novel describes how people look; the character pass
+    must see it (it previously fed locations only, starving the design fields)."""
+    scenes = [{
+        "scene_id": "C001_S01", "location": "Sảnh", "characters": ["Từ An"],
+        "action": "Từ An bước vào.",
+        "narration": ["Từ An mặc áo bào đen, sắc mặt tái nhợt."],  # appearance lives in narration
+        "mood": "tense", "dialogue": [],
+    }]
+    idx = ee.build_appearance_index(scenes)
+    tu_an = next(c for c in idx["characters"] if c["name"] == "Từ An")
+    assert "áo bào đen" in tu_an["evidence"]       # attire from narration reaches the character
+    assert "sắc mặt tái nhợt" in tu_an["evidence"]  # appearance from narration too
+
+
 def test_evidence_is_bounded(monkeypatch):
     monkeypatch.setattr(ee, "EVIDENCE_BUDGET", 40)
     big = {"scene_id": "C001_S01", "location": "L", "characters": ["A"],
@@ -186,6 +201,51 @@ async def test_enrich_only_restricts_to_one_entity():
     # The other character is left exactly as `learn` produced it (not enriched).
     other = next(e for e in reg.characters if e["canonical"] == "Tiểu Lan Nhi")
     assert (other.get("description") or {}).get("appearance", "") == ""
+
+
+def test_prompts_allow_grounded_inference():
+    """Design fields must be fillable by inference (figure-gen needs them), not
+    suppressed by a strict 'never invent' rule. Both prompts still take name+evidence."""
+    for tmpl in (ee._CHARACTER_PROMPT, ee._LOCATION_PROMPT):
+        low = tmpl.lower()
+        assert "never invent" not in low      # the rule that produced empty fields is gone
+        assert "infer" in low                 # grounded inference is explicitly allowed
+        assert "{name}" in tmpl and "{evidence}" in tmpl  # format contract intact
+
+
+@pytest.mark.asyncio
+async def test_enrich_accepts_flat_llm_response():
+    """The small Q4 model sometimes returns a flat object instead of nested
+    description/voice; those fields must still be captured, not dropped to empty."""
+    async def fake(prompt, *, label):
+        if label.startswith("enrich/loc/"):
+            return {"summary": "s", "setting": "", "lighting": "", "time_variants": []}
+        return {  # FLAT — no description/voice nesting
+            "summary": "a censor", "appearance": "lean", "attire": "robes",
+            "age_build": "young", "palette": "black",
+            "register": "low", "tone": "dry", "pace": "measured",
+        }
+
+    reg = _registry()
+    await ee.enrich_entities(reg, _scenes(), call_fn=fake, qwen={})
+    tu_an = next(e for e in reg.characters if e["canonical"] == "Từ An")
+    assert tu_an["description"]["appearance"] == "lean"
+    assert tu_an["description"]["summary"] == "a censor"
+    assert tu_an["voice"]["register"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_enrich_stats_count_llm_failures():
+    """A per-entity LLM exception is counted in `stats` so callers can surface a
+    fully-failed run instead of silently reporting success with empty fields."""
+    async def boom(prompt, *, label):
+        raise ValueError("qwen down")
+
+    reg = _registry()
+    stats: dict = {}
+    await ee.enrich_entities(reg, _scenes(), call_fn=boom, qwen={}, stats=stats)
+    assert stats.get("ok", 0) == 0
+    assert stats.get("failed", 0) >= 1   # every entity's LLM call failed
 
 
 # ── describe_scenes ──────────────────────────────────────────────────────────

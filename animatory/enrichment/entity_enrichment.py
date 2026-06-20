@@ -25,7 +25,7 @@ from animatory.enrichment.voice_profiles import aggregate
 logger = logging.getLogger(__name__)
 
 # Bound prompt size: enough context to describe an entity, never the whole episode.
-EVIDENCE_BUDGET = 1600       # max chars of evidence per entity
+EVIDENCE_BUDGET = 2800       # max chars of evidence per entity (incl. narration)
 ACTION_EXCERPT = 240         # max chars of action quoted per scene in the summary pass
 
 CallFn = Callable[..., Awaitable[dict]]
@@ -112,6 +112,8 @@ def build_appearance_index(scenes: list[dict]) -> dict[str, list[dict]]:
                 snippet_parts.append(action)
             if lines:
                 snippet_parts.append(f"{name}: " + " / ".join(lines))
+            if narration:
+                snippet_parts.append(narration)   # narration is where appearance/attire/age get described
             if snippet_parts:
                 c["_evidence"].append(" ".join(snippet_parts))
 
@@ -128,21 +130,21 @@ def build_appearance_index(scenes: list[dict]) -> dict[str, list[dict]]:
 # ── prompts ──────────────────────────────────────────────────────────────────
 
 _LOCATION_PROMPT = """\
-You are a background-art director for a 2D animation of a Vietnamese novel.
-Describe the LOCATION "{name}" for background painting, using ONLY the evidence
-snippets below. Return ONLY a JSON object — no markdown:
+You are a background-art director for a 2D animation of a Vietnamese historical/wuxia novel.
+Produce a background-painting profile for the LOCATION "{name}". Return ONLY a JSON object
+— no markdown:
 
 {{
-  "summary": "<one short sentence, or empty>",
-  "setting": "<architecture / furnishings / surroundings, or empty>",
-  "lighting": "<lighting, atmosphere or mood, or empty>",
+  "summary": "<one short sentence>",
+  "setting": "<architecture / furnishings / surroundings>",
+  "lighting": "<lighting, atmosphere or mood>",
   "time_variants": ["day" | "night" | "sunset" | "dawn" ...]
 }}
 
-Rules:
-- Use ONLY what the snippets state or clearly imply. If the text does not support
-  a field, return "" (or [] for time_variants). NEVER invent architecture, props,
-  colors, or times of day not present in the evidence.
+How to fill it:
+- Use details the evidence states or clearly implies FIRST, and never contradict them.
+- Where the evidence is silent, INFER a plausible, consistent setting from the location's
+  role and the novel's era — a painter needs a usable description, so avoid empty fields.
 - Keep each field short — a phrase, not prose. Vietnamese or English is fine.
 
 Evidence (scenes set in {name}):
@@ -151,32 +153,35 @@ Evidence (scenes set in {name}):
 ---"""
 
 _CHARACTER_PROMPT = """\
-You are a character designer for a 2D animation of a Vietnamese novel.
-Describe the CHARACTER "{name}" for a reference sheet and give a voice profile,
-using ONLY the evidence snippets below. Return ONLY a JSON object — no markdown:
+You are a character designer for a 2D animation of a Vietnamese historical/wuxia novel.
+Produce a complete visual + voice profile for the CHARACTER "{name}" that an artist can
+draw a reference sheet from. Return ONLY a JSON object — no markdown:
 
 {{
   "description": {{
-    "summary": "<one short sentence, or empty>",
-    "appearance": "<face, hair, distinguishing features, or empty>",
-    "attire": "<clothing / accessories, or empty>",
-    "age_build": "<apparent age and build, or empty>",
-    "palette": "<dominant colors associated with them, or empty>"
+    "summary": "<one vivid sentence capturing who they are>",
+    "appearance": "<face, hair, distinguishing features>",
+    "attire": "<clothing / accessories>",
+    "age_build": "<apparent age and build>",
+    "palette": "<dominant colors of their look>"
   }},
   "voice": {{
-    "register": "<pitch / register, e.g. low baritone, or empty>",
-    "tone": "<habitual tone, e.g. sardonic, warm, or empty>",
-    "pace": "<speaking pace, e.g. clipped, languid, or empty>"
+    "register": "<pitch / register, e.g. low baritone>",
+    "tone": "<habitual tone, e.g. sardonic, warm>",
+    "pace": "<speaking pace, e.g. clipped, languid>"
   }}
 }}
 
-Rules:
-- Use ONLY what the snippets state or clearly imply. If the text does not support
-  a field, return "". NEVER invent appearance, clothing, colors, or vocal traits
-  not present in the evidence.
-- Keep each field short. Vietnamese or English is fine.
+How to fill it:
+- Use details the evidence states or clearly implies FIRST, and never contradict them.
+- Where the evidence is silent, INFER a plausible, internally consistent design from the
+  character's personality, role, status, and the novel's era/setting. A reference sheet
+  needs every field — do NOT leave design fields empty.
+- The evidence may mention other characters or the setting; describe ONLY "{name}",
+  ignoring traits that clearly belong to someone else.
+- Keep each field short — a phrase, not prose. Vietnamese or English is fine.
 
-Evidence (scenes featuring {name}, including their dialogue):
+Evidence (scenes featuring {name}, including their dialogue and narration):
 ---
 {evidence}
 ---"""
@@ -204,6 +209,7 @@ async def enrich_entities(
     force: bool = False,
     on_entity: Callable[[str, dict], Awaitable[None]] | None = None,
     only: set[str] | None = None,
+    stats: dict | None = None,
 ) -> er.EntityRegistry:
     """Locations → Characters → Voices. Fills structured description + voice
     blocks on the registry, grounded in scene evidence. One bad entity is logged
@@ -216,11 +222,19 @@ async def enrich_entities(
     If ``only`` is given (a set of match keys, ``er._key(name)``), every entity
     whose key is not in the set is skipped entirely — no LLM call, no merge, no
     emit. Evidence is still built from all scenes, so a single targeted entity
-    still sees all its appearances. ``None`` (the default) enriches everything."""
+    still sees all its appearances. ``None`` (the default) enriches everything.
+
+    If ``stats`` (a dict) is given, ``stats["ok"]`` / ``stats["failed"]`` count
+    successful vs. raised LLM calls, so a caller can surface a fully-failed run
+    (e.g. Qwen unreachable) instead of silently reporting success with empty fields."""
     call_fn = call_fn or _default_call_fn()
     qwen = qwen or {}
     index = build_appearance_index(scenes)
     voice_stats = {er._key(p["character"]): p for p in aggregate(scenes)}
+
+    def _bump(key: str) -> None:
+        if stats is not None:
+            stats[key] = stats.get(key, 0) + 1
 
     async def _emit(kind: str, name: str) -> None:
         if on_entity is None:
@@ -242,9 +256,11 @@ async def enrich_entities(
             data = await call_fn(prompt, label=f"enrich/loc/{loc['name']}", **qwen)
         except Exception as exc:  # noqa: BLE001 — degrade gracefully per entity
             logger.warning("[enrich] location %s failed: %r", loc["name"], exc)
+            _bump("failed")
             registry.merge_descriptions("locations", loc["name"], appears_in=loc["appears_in"])
             await _emit("locations", loc["name"])
             continue
+        _bump("ok")
         description = {
             "summary": _coerce_str(data.get("summary")),
             "setting": _coerce_str(data.get("setting")),
@@ -261,11 +277,11 @@ async def enrich_entities(
     for ch in index["characters"]:
         if only is not None and ch["key"] not in only:
             continue
-        stats = voice_stats.get(ch["key"], {})
+        vstats = voice_stats.get(ch["key"], {})
         voice_stat_block = {
-            "dominant_emotion": stats.get("dominant_emotion") or "",
-            "dominant_intensity": stats.get("dominant_intensity") or "",
-            "line_count": stats.get("line_count") or 0,
+            "dominant_emotion": vstats.get("dominant_emotion") or "",
+            "dominant_intensity": vstats.get("dominant_intensity") or "",
+            "line_count": vstats.get("line_count") or 0,
         }
         if not ch["evidence"]:
             registry.merge_descriptions(
@@ -278,13 +294,17 @@ async def enrich_entities(
             data = await call_fn(prompt, label=f"enrich/char/{ch['name']}", **qwen)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[enrich] character %s failed: %r", ch["name"], exc)
+            _bump("failed")
             registry.merge_descriptions(
                 "characters", ch["name"], voice=voice_stat_block, appears_in=ch["appears_in"],
             )
             await _emit("characters", ch["name"])
             continue
-        d = data.get("description") if isinstance(data.get("description"), dict) else {}
-        v = data.get("voice") if isinstance(data.get("voice"), dict) else {}
+        _bump("ok")
+        # The small Q4 model is inconsistent about nesting; accept flat responses
+        # ({appearance: …}) as well as nested ({description: {appearance: …}}).
+        d = data.get("description") if isinstance(data.get("description"), dict) else data
+        v = data.get("voice") if isinstance(data.get("voice"), dict) else data
         description = {
             "summary": _coerce_str(d.get("summary")),
             "appearance": _coerce_str(d.get("appearance")),
