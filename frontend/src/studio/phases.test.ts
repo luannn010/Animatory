@@ -30,6 +30,12 @@ describe('phases', () => {
     expect(PHASE_META.script.label).toBe('Script')
     expect(PHASE_META.post.label).toBe('Post-production')
   })
+  it('exposes a short label per phase', () => {
+    expect(PHASE_META.script.short).toBe('Script')
+    expect(PHASE_META.pre.short).toBe('Pre')
+    expect(PHASE_META.production.short).toBe('Production')
+    expect(PHASE_META.post.short).toBe('Post')
+  })
   it('treats passed and open gates as reachable, locked as not', () => {
     expect(isPhaseReachable(project, 'script')).toBe(true)
     expect(isPhaseReachable(project, 'production')).toBe(true)
